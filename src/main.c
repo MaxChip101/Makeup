@@ -15,10 +15,31 @@ const char* MAKEUP_COMMANDS_FLAG = "--help";
 const char* MAKEUP_CWD_FLAG_SHORT = "-d";
 const char* MAKEUP_CWD_FLAG = "--cwd";
 
+typedef enum
+{
+    TOKEN_WS,
+    TOKEN_STR,
+    TOKEN_EOF
+} TokenType;
+
+typedef struct
+{
+    TokenType type;
+    char* value;
+    int position;
+} Token;
 
 
+char* build_token(char* content, int start)
+{
 
-FILE *file;
+}
+
+int parse(char* content)
+{
+
+    return 0;
+}
 
 int main(int argc, char* argv[])
 {
