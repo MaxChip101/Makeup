@@ -16,6 +16,9 @@ const char* MAKEUP_COMMANDS_FLAG = "--help";
 const char* MAKEUP_CWD_FLAG_SHORT = "-d";
 const char* MAKEUP_CWD_FLAG = "--directory";
 
+// Constants
+const unsigned int TOKEN_AMOUNT = 5000;
+
 typedef enum
 {
     TOKEN_LPAREN,
@@ -32,7 +35,7 @@ typedef enum
     TOKEN_AND,
     TOKEN_DOLLAR,
     TOKEN_COMMA,
-    TOKEN_LN,
+    TOKEN_CMD_END,
     TOKEN_EOF,
     TOKEN_UNKOWN
 } TokenType;
@@ -44,94 +47,39 @@ typedef struct
     int line;
 } Token;
 
+void free_tokens(Token* tokens)
+{
+    for(long unsigned int i = 0; i < TOKEN_AMOUNT; i++)
+    {
+        free(tokens[i].value);
+    }
+    free(tokens);
+}
+
 Token* tokenize(char* content)
 {
-    Token* tokens = malloc(sizeof(Token) * 1000);
-    int token_count = 0;
-    char token_name;
-    int line = 1;
-    int i = 0;
+    Token* tokens = malloc(sizeof(Token) * TOKEN_AMOUNT);
+    unsigned int token_count = 0;
+    unsigned int line = 1;
+    unsigned int i = 0;
+    char str[2] = "\0";
+
     while (content[i] != '\0')
     {
+        if(content[i] == '#')
+        {
+            while(content[i] != '\n' || content[i] != '\0')
+            {
+                i++;
+                line++;
+            }
+            continue;
+        }
+
         // skipping whitespaces
         while (content[i] == ' ' || content[i] == '\t' || content[i] == '\r')
         {
             i++;
-        }
-
-        switch (content[i])
-        {
-            case '\n':
-                tokens[token_count].type = TOKEN_LN;
-                tokens[token_count].line = line;
-                tokens[token_count].value = strdup(content[i]);
-                token_count++;
-                i++;
-                line++;
-                continue;
-            case '(':
-                tokens[token_count].type = TOKEN_RPAREN;
-                tokens[token_count].line = line;
-                tokens[token_count].value = strdup(content[i]);
-                token_count++;
-                i++;
-                continue;
-            case ')':
-                tokens[token_count].type = TOKEN_LPAREN;
-                tokens[token_count].line = line;
-                tokens[token_count].value = strdup(content[i]);
-                token_count++;
-                i++;
-                continue;
-            case '{':
-                tokens[token_count].type = TOKEN_LBRACE;
-                tokens[token_count].line = line;
-                tokens[token_count].value = strdup(content[i]);
-                token_count++;
-                i++;
-                continue;
-            case '}':
-                tokens[token_count].type = TOKEN_RBRACE;
-                tokens[token_count].line = line;
-                tokens[token_count].value = strdup(content[i]);
-                token_count++;
-                i++;
-                continue;
-            case '=':
-                tokens[token_count].type = TOKEN_EQUALS;
-                tokens[token_count].line = line;
-                tokens[token_count].value = strdup(content[i]);
-                token_count++;
-                i++;
-                continue;
-            case '$':
-                tokens[token_count].type = TOKEN_DOLLAR;
-                tokens[token_count].line = line;
-                tokens[token_count].value = strdup(content[i]);
-                token_count++;
-                i++;
-                continue;
-            case '&':
-                tokens[token_count].type = TOKEN_AND;
-                tokens[token_count].line = line;
-                tokens[token_count].value = strdup(content[i]);
-                token_count++;
-                i++;
-                continue;
-            case '@':
-                tokens[token_count].type = TOKEN_AT;
-                tokens[token_count].line = line;
-                tokens[token_count].value = strdup(content[i]);
-                token_count++;
-                i++;
-                continue;
-            case ',':
-                tokens[token_count].type = TOKEN_COMMA;
-                tokens[token_count].line = line;
-                tokens[token_count].value = strdup(content[i]);
-                token_count++;
-                i++;
-                continue;
         }
 
         if(isalpha(content[i]) || content[i] == '_')
@@ -149,10 +97,98 @@ Token* tokenize(char* content)
 
             tokens[token_count].type = TOKEN_STR;
             tokens[token_count].line = line;
-            tokens[token_count].value = strdup(content[i]);
+            tokens[token_count].value = strdup(value);
             token_count++;
             continue;
 
+        }
+
+        switch (content[i])
+        {
+            case '\n':
+                i++;
+                line++;
+                continue;
+            case '(':
+                tokens[token_count].type = TOKEN_RPAREN;
+                tokens[token_count].line = line;
+                str[0] = content[i];
+                tokens[token_count].value = strdup(str);
+                token_count++;
+                i++;
+                continue;
+            case ')':
+                tokens[token_count].type = TOKEN_LPAREN;
+                tokens[token_count].line = line;
+                str[0] = content[i];
+                tokens[token_count].value = strdup(str);
+                token_count++;
+                i++;
+                continue;
+            case '{':
+                tokens[token_count].type = TOKEN_LBRACE;
+                tokens[token_count].line = line;
+                str[0] = content[i];
+                tokens[token_count].value = strdup(str);
+                token_count++;
+                i++;
+                continue;
+            case '}':
+                tokens[token_count].type = TOKEN_RBRACE;
+                tokens[token_count].line = line;
+                str[0] = content[i];
+                tokens[token_count].value = strdup(str);
+                token_count++;
+                i++;
+                continue;
+            case '=':
+                tokens[token_count].type = TOKEN_EQUALS;
+                tokens[token_count].line = line;
+                str[0] = content[i];
+                tokens[token_count].value = strdup(str);
+                token_count++;
+                i++;
+                continue;
+            case '$':
+                tokens[token_count].type = TOKEN_DOLLAR;
+                tokens[token_count].line = line;
+                str[0] = content[i];
+                tokens[token_count].value = strdup(str);
+                token_count++;
+                i++;
+                continue;
+            case '&':
+                tokens[token_count].type = TOKEN_AND;
+                tokens[token_count].line = line;
+                str[0] = content[i];
+                tokens[token_count].value = strdup(str);
+                token_count++;
+                i++;
+                continue;
+            case '@':
+                tokens[token_count].type = TOKEN_AT;
+                tokens[token_count].line = line;
+                str[0] = content[i];
+                tokens[token_count].value = strdup(str);
+                token_count++;
+                i++;
+                continue;
+            case ',':
+                tokens[token_count].type = TOKEN_COMMA;
+                tokens[token_count].line = line;
+                str[0] = content[i];
+                tokens[token_count].value = strdup(str);
+                token_count++;
+                i++;
+                continue;
+            default:
+                tokens[token_count].type = TOKEN_STR;
+                tokens[token_count].line = line;
+                str[0] = content[i];
+                tokens[token_count].value = strdup(str);
+                token_count++;
+                i++;
+                continue;
         }
     }
 
@@ -166,36 +202,61 @@ Token* tokenize(char* content)
 
 Token* logicize_tokens(Token* tokens)
 {
-    Token* logic_tokens = malloc(sizeof(tokens));
-    int i = 0;
+    Token* logic_tokens = malloc(sizeof(Token) * TOKEN_AMOUNT);
+    unsigned int logic_i;
+    unsigned int i = 0;
 
     while (tokens[i].type != TOKEN_EOF)
     {
+        // variable definition
         if(tokens[i].type == TOKEN_STR && tokens[i+1].type == TOKEN_EQUALS)
         {
             logic_tokens[i].type = TOKEN_VAR;
-            logic_tokens[i].value = tokens[i].value;
+            logic_tokens[i].value = strdup(tokens[i].value);
             logic_tokens[i].line = tokens[i].line;
-            i++;
-            continue; // make it remove the equals
-        }
-        else if(tokens[i].type == TOKEN_AT && tokens[i+1].type == TOKEN_LPAREN && tokens[i+2].type == TOKEN_STR && tokens[i].type == TOKEN_RPAREN)
-        {
-            // make entire thing make a function def
-        }
-        else
-        {
-            logic_tokens[i] = tokens[i];
             i++;
             continue;
         }
+        // funciton reference
+        else if(tokens[i].type == TOKEN_AT && tokens[i+1].type == TOKEN_LPAREN && tokens[i+2].type == TOKEN_STR && tokens[i].type == TOKEN_RPAREN)
+        {
+            logic_tokens[i+2].type = TOKEN_FUNCREF;
+            logic_tokens[i+2].value = strdup(tokens[i+2].value);
+            logic_tokens[i+2].line = tokens[i+2].line;
+            i+=4;
+        }
+        // variable reference
+        else if(tokens[i].type == TOKEN_DOLLAR && tokens[i+1].type == TOKEN_LPAREN && tokens[i+2].type == TOKEN_STR && tokens[i+3].type == TOKEN_RPAREN)
+        {
+            logic_tokens[logic_i].type = TOKEN_VARREF;
+            logic_tokens[logic_i].value = strdup(tokens[i+2].value);
+            logic_tokens[logic_i].line = tokens[i+2].line;
+            i+=4;
+            logic_i++;
+        }
+        // pass tokens
+        else
+        {
+            logic_tokens[logic_i].type = tokens[i].type;
+            logic_tokens[logic_i].value = strdup(tokens[i].value);
+            logic_tokens[logic_i].line = tokens[i].line;
+            i++;
+            logic_i++;
+            continue;
+        }
     }
-    
+    free_tokens(tokens);
+    return(logic_tokens);
 }
 
 int parse(Token* tokens)
 {
-
+    for(unsigned int i = 0; i < TOKEN_AMOUNT; i++)
+    {
+        printf("('%s', %i) ", tokens[i].value, tokens[i].line);
+    }
+    free_tokens(tokens);
+    return 0;
 }
 
 
@@ -232,7 +293,7 @@ int main(int argc, char* argv[])
 
     // check for Makeup file
     char full_cwd[PATH_MAX];
-    snprintf(full_cwd, sizeof(full_cwd), "%s%s", cwd, "/Makeup");
+    snprintf(full_cwd, sizeof(full_cwd), "%s%s", cwd, "/Makeup2");
     if(access(full_cwd, F_OK) == 0)
     {
         FILE* makeup_file = fopen(full_cwd, "r");
@@ -250,7 +311,7 @@ int main(int argc, char* argv[])
             size_t read_size = fread(content, 1, size, makeup_file);
             content[read_size] = '\0';
             fclose(makeup_file);
-            logicize_tokens(tokenize(content));
+            parse(logicize_tokens(tokenize(content)));
             puts(content);
             free(content);
         }
