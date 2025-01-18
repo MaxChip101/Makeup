@@ -1,0 +1,22 @@
+CC = gcc
+SOURCE = src
+
+SOURCE_FILES = regex($(src)/*.c)
+SOURCE_FILES = findf()
+
+default(@(build))
+{
+    @build
+}
+
+build()
+{
+    shell(gcc SOURCE_FILES -o output)
+}
+
+clean
+{
+
+}
+
+.commands(clean, build)
