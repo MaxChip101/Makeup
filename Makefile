@@ -1,39 +1,30 @@
 # Compiler settings
-CC = gcc
-CFLAGS = -Wall -Wextra -g
+CXX = g++
+CXXFLAGS = -Wall -Wextra -std=c++17
 
-# Directory paths
+# Directories
 SRC_DIR = src
 BUILD_DIR = build
-OBJ_DIR = $(BUILD_DIR)/objects
 
-# Find all .c files in src directory
-SRCS = $(wildcard $(SRC_DIR)/*.c)
-# Generate object file names
-OBJS = $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
-# Executable name
-EXEC = $(BUILD_DIR)/makeup
+# Source files and output
+SRCS = $(wildcard $(SRC_DIR)/*.cpp)
+OBJS = $(SRCS:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
+TARGET = $(BUILD_DIR)/program
 
-# Default target
-all: $(BUILD_DIR) $(OBJ_DIR) $(EXEC)
+all: $(TARGET)
 
-# Create build directory
+# Create build directory if it doesn't exist
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-# Create objects directory
-$(OBJ_DIR):
-	mkdir -p $(OBJ_DIR)
+# Main target
+$(TARGET): $(OBJS)
+	$(CXX) $(OBJS) -o $(TARGET)
 
-# Compile source files into object files
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
-	$(CC) $(CFLAGS) -c $< -o $@
+# Compile source files
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Link object files into executable
-$(EXEC): $(OBJS)
-	$(CC) $(OBJS) -o $(EXEC)
-
-# Clean build files
 clean:
 	rm -rf $(BUILD_DIR)
 
