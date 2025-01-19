@@ -30,14 +30,13 @@ typedef enum
     TOKEN_VARREF,
     TOKEN_FUNC,
     TOKEN_FUNCREF,
+    TOKEN_MAKEUP_FUNC,
     TOKEN_EQUALS,
     TOKEN_AT,
     TOKEN_AND,
     TOKEN_DOLLAR,
     TOKEN_COMMA,
-    TOKEN_CMD_END,
     TOKEN_EOF,
-    TOKEN_UNKOWN
 } TokenType;
 
 typedef struct
@@ -173,7 +172,7 @@ vector<Token> logicize_tokens(vector<Token> tokens)
     
     Token _token;
 
-    while (tokens[i].type != TOKEN_EOF)
+    while(tokens[i].type != TOKEN_EOF)
     {
         // variable definition
         if(tokens[i].type == TOKEN_STR && tokens[i+1].type == TOKEN_EQUALS)
@@ -184,6 +183,15 @@ vector<Token> logicize_tokens(vector<Token> tokens)
             logic_tokens.push_back(_token);
             i++;
             continue;
+        }
+        // funciton definition
+        else if(tokens[i].type == TOKEN_STR && tokens[i].value == "func" && tokens[i+1].type == TOKEN_STR && tokens[i+2].type == TOKEN_LPAREN)
+        {
+            _token.value = tokens[i+2].value;
+            _token.type = TOKEN_FUNC;
+            _token.line = tokens[i+2].line;
+            logic_tokens.push_back(_token);
+            i+=2;
         }
         // funciton reference
         else if(tokens[i].type == TOKEN_AT && tokens[i+1].type == TOKEN_LPAREN && tokens[i+2].type == TOKEN_STR && tokens[i+3].type == TOKEN_RPAREN)
@@ -203,6 +211,15 @@ vector<Token> logicize_tokens(vector<Token> tokens)
             logic_tokens.push_back(_token);
             i+=4;
             
+        }
+        // built-in function call
+        else if(tokens[i].type == TOKEN_STR && tokens[i+1].type == TOKEN_LPAREN)
+        {
+            _token.value = tokens[i].value;
+            _token.type = TOKEN_MAKEUP_FUNC;
+            _token.line = tokens[i].line;
+            logic_tokens.push_back(_token);
+            i++;
         }
         // pass tokens
         else
@@ -225,15 +242,19 @@ int parse(vector<Token> tokens)
     {
         if(tokens[i].type == TOKEN_VAR)
         {
-
+            // do variable checking
         }
-        cout << '(' << tokens[i].value << ", " << tokens[i].line << ')' << endl;
     }
     return 0;
 }
 
-int interperet()
+int interperet(vector<Token> tokens)
 {
+    for(size_t i = 0; i < tokens.size(); i++)
+    {
+        // do makeup execution
+        cout << '(' << tokens[i].value << ", " << tokens[i].line << ')' << endl;
+    }
     return 0;
 }
 
