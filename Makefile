@@ -5,25 +5,28 @@ CXXFLAGS = -Wall -Wextra -std=c++17
 # Directories
 SRC_DIR = src
 BUILD_DIR = build
-OBJ_DIR = $(BUILD_DIR)/obj
+OBJ_DIR = $(BUILD_DIR)/objects
 
 # Source files and output
 SRCS = $(wildcard $(SRC_DIR)/*.cpp)
 OBJS = $(SRCS:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
-TARGET = $(BUILD_DIR)/program
+TARGET = $(BUILD_DIR)/makeup
 
 all: $(TARGET)
 
-# Create build directory if it doesn't exist
+# Create directories if they don't exist
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
+
+$(OBJ_DIR): | $(BUILD_DIR)
+	mkdir -p $(OBJ_DIR)
 
 # Main target
 $(TARGET): $(OBJS)
 	$(CXX) $(OBJS) -o $(TARGET)
 
 # Compile source files
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
