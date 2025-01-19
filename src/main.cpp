@@ -223,15 +223,22 @@ int parse(vector<Token> tokens)
 {
     for(size_t i = 0; i < tokens.size(); i++)
     {
+        if(tokens[i].type == TOKEN_VAR)
+        {
+
+        }
         cout << '(' << tokens[i].value << ", " << tokens[i].line << ')' << endl;
     }
     return 0;
 }
 
+int interperet()
+{
+    return 0;
+}
 
 int main(int argc, char* argv[])
 {
-
     char cwd[1024];
     string tempcwd = getcwd(cwd, sizeof(cwd));
     
@@ -272,6 +279,10 @@ int main(int argc, char* argv[])
         content.push_back('\n');
     }
     makeup_file.close();
-    parse(logicize_tokens(tokenize(content)));
+    vector<Token> tokens = logicize_tokens(tokenize(content));
+    if(parse(tokens) == 0)
+    {
+        interperet(tokens);
+    }
     return(0);
 }
