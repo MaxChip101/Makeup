@@ -5,10 +5,11 @@ CXXFLAGS = -Wall -Wextra -std=c++17
 # Directories
 SRC_DIR = src
 BUILD_DIR = build
+OBJ_DIR = $(BUILD_DIR)/obj
 
 # Source files and output
 SRCS = $(wildcard $(SRC_DIR)/*.cpp)
-OBJS = $(SRCS:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
+OBJS = $(SRCS:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
 TARGET = $(BUILD_DIR)/program
 
 all: $(TARGET)
