@@ -16,8 +16,8 @@ const char* MAKEUP_VERSION_FLAG_SHORT = "-v";
 const char* MAKEUP_VERSION_FLAG = "--version";
 const char* MAKEUP_COMMANDS_FLAG_SHORT = "-h";
 const char* MAKEUP_COMMANDS_FLAG = "--help";
-const char* MAKEUP_CWD_FLAG_SHORT = "-d";
-const char* MAKEUP_CWD_FLAG = "--directory";
+const char* MAKEUP_DIRECTORY_FLAG_SHORT = "-d";
+const char* MAKEUP_DIRECTORY_FLAG = "--directory";
 
 typedef enum
 {
@@ -54,10 +54,10 @@ vector<Token> tokenize(string content)
     unsigned int line = 1;
     unsigned int i = 0;
 
-    while (content[i] != '\0')
+    while(content[i] != '\0')
     {
         // skipping whitespaces
-        while (content[i] == ' ' || content[i] == '\t' || content[i] == '\r')
+        while(content[i] == ' ' || content[i] == '\t' || content[i] == '\r')
         {
             i++;
         }
@@ -65,7 +65,7 @@ vector<Token> tokenize(string content)
         if(isalpha(content[i]) || content[i] == '_')
         {
             string value = "";
-            while (isalnum(content[i]) || content[i] == '_')
+            while(isalnum(content[i]) || content[i] == '_')
             {
                 value += content[i];
                 i++;
@@ -77,7 +77,7 @@ vector<Token> tokenize(string content)
             continue;
         }
 
-        switch (content[i])
+        switch(content[i])
         {
             case '\n':
                 i++;
@@ -255,7 +255,7 @@ int interperet(vector<Token> tokens)
         // do makeup execution
         cout << '(' << tokens[i].value << ", " << tokens[i].line << ')' << endl;
     }
-    return 0;
+    return(0);
 }
 
 int main(int argc, char* argv[])
@@ -270,7 +270,7 @@ int main(int argc, char* argv[])
     {
         if(strcmp(argv[1], MAKEUP_COMMANDS_FLAG_SHORT) == 0 || strcmp(argv[1], MAKEUP_COMMANDS_FLAG) == 0)
         {
-            cout << "Options:\n -h, --help\tPrints list of commands.\n -v, --version\tPrints Makeup version.\n -d, --cwd\tPrints the current working directory." << endl;
+            cout << "Options:\n " << MAKEUP_COMMANDS_FLAG_SHORT << ", " << MAKEUP_COMMANDS_FLAG << "\tPrints list of commands.\n " << MAKEUP_VERSION_FLAG_SHORT << ", " << MAKEUP_VERSION_FLAG << "\tPrints Makeup version.\n " << MAKEUP_DIRECTORY_FLAG_SHORT << ", " << MAKEUP_DIRECTORY_FLAG << "\tPrints the current working directory." << endl;
             exit(EXIT_SUCCESS);
         }
         else if(strcmp(argv[1], MAKEUP_VERSION_FLAG) == 0 || strcmp(argv[1], MAKEUP_VERSION_FLAG_SHORT) == 0)
@@ -278,7 +278,7 @@ int main(int argc, char* argv[])
             cout << "Makeup version " << MAKEUP_VERSION << endl;
             exit(EXIT_SUCCESS);
         }
-        else if(strcmp(argv[1], MAKEUP_CWD_FLAG) == 0 || strcmp(argv[1], MAKEUP_CWD_FLAG_SHORT) == 0)
+        else if(strcmp(argv[1], MAKEUP_DIRECTORY_FLAG) == 0 || strcmp(argv[1], MAKEUP_DIRECTORY_FLAG_SHORT) == 0)
         {
             cout << filesystem::current_path() << endl;
             exit(EXIT_SUCCESS);
@@ -288,7 +288,7 @@ int main(int argc, char* argv[])
     // check for Makeup file
     ifstream makeup_file(full_cwd.c_str());
     if(!makeup_file.is_open()) {
-        cout << "Makeup file does not exist in '" << filesystem::current_path() << "', please make a Makeup file.\ntype `makeup -h` or `makeup --help` for flags" << endl;
+        cerr << "Makeup file does not exist in " << filesystem::current_path() << ", please make a Makeup file.\ntype `makeup -h` or `makeup --help` for flags" << endl;
         exit(EXIT_FAILURE);
     }
     string content;
