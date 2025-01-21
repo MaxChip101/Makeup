@@ -46,6 +46,11 @@ typedef struct
     int line;
 } Token;
 
+typedef struct
+{
+    Token variable;
+    vector<Token> value;
+} Variable;
 
 vector<Token> tokenize(string content)
 {
@@ -238,22 +243,114 @@ vector<Token> logicize_tokens(vector<Token> tokens)
 
 int parse(vector<Token> tokens)
 {
-    for(size_t i = 0; i < tokens.size(); i++)
+    unsigned int i = 0;
+    while(i < tokens.size())
     {
         if(tokens[i].type == TOKEN_VAR)
         {
+            /*
+            int _iterator = i;
+            while (tokens[i].line == tokens[i].line)
+            {
+
+                _iterator++;
+            }
+            */
+            i++;
             // do variable checking
+        }
+        else if(tokens[i].type == TOKEN_MAKEUP_FUNC)
+        {
+            if(strcmp(tokens[i].value.c_str(), "scan") == 0 || strcmp(tokens[i].value.c_str(), "map") == 0)
+            {
+                i++;
+            }
+            else
+            {
+                cerr << "makeup: '" << tokens[i].value << "' is not an existing Makeup function, line: " << tokens[i].line << endl;
+                exit(EXIT_FAILURE);
+            }
+        }
+        else
+        {
+            i++;
         }
     }
     return 0;
 }
 
+Token makeup_scan()
+{
+
+}
+
+Token makeup_map()
+{
+    
+}
+
 int interperet(vector<Token> tokens)
 {
+    vector<Token> new_tokens;
+    vector<Variable> variables;
+
     for(size_t i = 0; i < tokens.size(); i++)
     {
+        if(tokens[i].type == TOKEN_VAR)
+        {
+            for(size_t iterator = 0; iterator < variables.size(); iterator++)
+            {
+                if(strcmp(tokens[i].value.c_str(), variables[iterator].variable.value.c_str()) == 0)
+                {
+                    cerr << "makeup: Variable '" << variables[iterator].variable.value << "' already exists on line: " << variables[iterator].variable.line << ", line: " << tokens[i].line << endl;
+                    exit(EXIT_FAILURE);
+                }
+            }
+
+            unsigned int _iterator = i;
+            vector<Token> _temp_value;
+            while (tokens[i].line == tokens[_iterator].line)
+            {
+                _temp_value.push_back(tokens[_iterator]);
+                _iterator++;
+            }
+            
+            Variable _var;
+            _var.variable  = tokens[i];
+            _var.value = _temp_value;
+            
+            variables.push_back(_var);
+            i+=_iterator;
+        }
+        else if(tokens[i].type == TOKEN_VARREF)
+        {
+            bool _found = false;
+            for(size_t iterator = 0; iterator < variables.size(); iterator++)
+            {
+                if(strcmp(tokens[i].value.c_str(), variables[iterator].variable.value.c_str()) == 0)
+                {
+                    for(size_t iterator2 = 0; iterator2 < variables[iterator].value.size(); i++)
+                    {
+                    }
+                    tokens[i].value = 
+                    _found = true;
+                }
+            }
+
+            if(!_found)
+            {
+                cerr << "makeup: Variable '" << tokens[i].value << "' does not exist, line: " << tokens[i].line << endl;
+                exit(EXIT_FAILURE);
+            }
+
+
+
+        }
+        else
+        {
+            new_tokens.push_back(tokens[i]);
+        }
         // do makeup execution
-        cout << '(' << tokens[i].value << ", " << tokens[i].line << ')' << endl;
     }
     return(0);
 }
@@ -303,7 +400,10 @@ int main(int argc, char* argv[])
     vector<Token> tokens = logicize_tokens(tokenize(content));
     if(parse(tokens) == 0)
     {
-        interperet(tokens);
+        if(interperet(tokens) == 0)
+        {
+            cout << "complete" << endl;
+        }
     }
     return(0);
 }
