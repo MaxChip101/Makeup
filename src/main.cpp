@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <unistd.h>
 #include <bits/stdc++.h>
+#include <cstdio>
+#include <memory>
 #include <vector>
 
 using namespace std;
@@ -44,13 +46,20 @@ typedef struct
 map<string, string> variables;
 map<string, int> functions;
 
+
 vector<Token> tokenize(string content);
+string exec(const string &cmd);
+string shell_command(string input);
+void initialize_functions(vector<Token> tokens);
+void initialize_variables(vector<Token> tokens);
+void initialize_interperet(vector<Token> tokens);
+
 
 int main(int argc, char* argv[])
 {
+    printf("%s", exec("ls").c_str());
     char cwd[1024];
     string tempcwd = getcwd(cwd, sizeof(cwd));
-    
     string full_cwd = tempcwd + "/Makeup";
 
     // check for flags
@@ -97,13 +106,14 @@ vector<Token> tokenize(string content)
     int index = 0;
     int line = 1;
     int col = 1;
-    bool inlcude_spaces = false;
+    bool include_spaces = false;
+    bool commented = false;
     TokenType type;
     string value = "";
     vector<Token> tokens;
     while(content[index] != '\0')
     {
-        if(isalpha(content[index]) || content[index] == '_')
+        if(isalpha(content[index]))
         {
             type = TOKEN_LIT;
             int start = index;
@@ -117,29 +127,40 @@ vector<Token> tokenize(string content)
         }
         else
         {
-            if(content[index] == '(' && content[index+1 == '\"' && !include_spaces)
+            if(content[index] == '(' && content[index+1] == '\"' && !include_spaces)
             {
                 include_spaces = true;
                 index+=2;
+                col += 2;
             }
-            else if(content[index] == '\"' && content[index+1 == ')' && !include_spaces)
+            else if(content[index] == '\"' && content[index+1] == ')' && !include_spaces)
             {
                 include_spaces = false;
                 index+=2;
+                col+=2;
+                continue;
             }
             else if(content[index] == '\n') { // make it so that double quotes preserve white spaces and work on shell commands in variables and stuff and make the tokens become strings in variable declarations
                 line++;
                 col = 0;
+                commented = false;
             }
             else if(content[index] == ' ' || content[index] == '\t' && !include_spaces)
             {
                 col++;
                 continue;
             }
+            else if(content[index] == '#')
+            {
+                commented = !commented;
+            }
             value = content[index];
             type = TOKEN_SYMBOL;
         }
-        tokens.push_back(Token{.value = "", .type = type, .line = line, .col = col});
+        if(!commented)
+        {
+            tokens.push_back(Token{.value = "", .type = type, .line = line, .col = col});
+        }
         col++;
         index++;
     }
@@ -149,10 +170,75 @@ vector<Token> tokenize(string content)
     return(tokens);
 }
 
+string exec(const string &cmd)
+{
+    string result;
+    char buffer[128];
+
+    FILE *pipe = popen(cmd.c_str(), "r");
+    if (!pipe)
+    {
+        return "\0";
+    }
+
+    while(!feof(pipe))
+    {
+        if(fgets(buffer, sizeof(buffer), pipe) != nullptr)
+        {
+            result += buffer;
+        }
+    }
+
+    pclose(pipe);
+    return result;
+}
+
+string shell_command(string input)
+{
+    string final_string = "";
+    string reversed_string = "";
+    for(int index = input.length()-1; index >= 0;  index--)
+    {
+        if(input[index] == '!' && input[index+1] == '(')
+        {
+            index += 2;
+            int index2 = index;
+            string command = "";
+            while(input[index2] != ')')
+            {
+                command.push_back(input[index2]);
+                index2++;
+            }
+            string value = exec(command);
+            for(int index3 = value.length() - 1; index3 >= 0; index3--)
+            {
+                reversed_string += value[index3];
+            }
+        }
+        else if(input[index] == ')')
+        {
+            continue;
+        }
+        else
+        {
+            reversed_string += input[index];
+        }
+    }
+
+    for(int index2 = reversed_string.length() - 1; index2 >= 0; index2--)
+    {
+        final_string += reversed_string[index2];
+    }
+
+    return final_string;
+}
+
 void initialize_functions(vector<Token> tokens)
 {
 
 }
+
+
 
 void initialize_variables(vector<Token> tokens)
 {
@@ -161,7 +247,7 @@ void initialize_variables(vector<Token> tokens)
     int index = 0;
     while(tokens[index].type != TOKEN_EOF)
     {
-        if(tokens[index].type == TOKEN_LIT && tokens[index+1].value.compare("="))
+        if(tokens[index].value.compare("_") && tokens[index+1].type == TOKEN_LIT && tokens[index+2].value.compare("="))
         {
             int start = index;
             int index2 = 0;
@@ -171,23 +257,24 @@ void initialize_variables(vector<Token> tokens)
                 value.push_back(tokens[start + index2]);
                 index2++;
             }
+            index += index2;
             value.push_back(Token{.value = "\0", .type = TOKEN_EOF, .line = 0, .col = 0});
             pre_variables.insert({tokens[index].value, value});
         }
     }
 
     index = 0;
-    bool restart = true;
+    bool restart = false;
     while(tokens[index].type != TOKEN_EOF)
     {
-        if(tokens[index].type == TOKEN_LIT && tokens[index+1].value.compare("="))
+        if(tokens[index].value.compare("_") && tokens[index+1].type == TOKEN_LIT && tokens[index+2].value.compare("="))
         {
             vector<Token> value = pre_variables[tokens[index].value];
             vector<Token> new_value;
             int index2 = 0;
             while (value[index2].type != TOKEN_EOF)
             {
-                if(value[index2].value.compare("$") && value[index2+1].value.compare("(") && value[index2+3].value.compare(")"))
+                if(value[index2].value.compare("$") && value[index2+1].value.compare("(") && value[index2+2].type == TOKEN_LIT && value[index2+3].value.compare(")"))
                 {
                     restart = true;
                     if(value[index2+2].type != TOKEN_LIT || !pre_variables.count(value[index2+2].value) || tokens[index].value.compare(value[index2+2].value))
@@ -220,21 +307,28 @@ void initialize_variables(vector<Token> tokens)
     index = 0;
     while(tokens[index].type != TOKEN_EOF)
     {
-        if(tokens[index].type == TOKEN_LIT && tokens[index+1].value.compare("="))
+        if(tokens[index].value.compare("_") && tokens[index+1].type == TOKEN_LIT && tokens[index+2].value.compare("="))
         {
             vector<Token> value = pre_variables[tokens[index].value];
             string new_value = "";
             int index2 = 0;
             while (value[index2].type != TOKEN_EOF)
             {
-                new_value.append(value[index2].value);
+                new_value += value[index2].value;
                 index2++;
             }
+            variables.insert({tokens[index+1].value, new_value});
         }
     }
 }
 
 void initialize_interperet(vector<Token> tokens)
 {
+    initialize_variables(tokens);
 
+    int index = 0;
+    while(tokens[index].type != TOKEN_EOF)
+    {
+        index++;
+    }
 }

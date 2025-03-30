@@ -1,1 +1,26 @@
-CC = gcc
+_CXX = g++
+_SOURCE_DIR = src
+_BUILD_DIR = build
+_OBJECT_DIR = $(BUILD_DIR)/objects
+_BINARY_DIR = $(BUILD_DIR)/bin
+
+_SRC = ("!(ls $(SOURCE_DIR)/*.cpp)")
+
+~makeup: build
+~debug: debug
+
+build(make_directories, get_objects)
+    ("!($(CXX) !(ls $(OBJECT_DIR)/*.o) -o $(BINARY_DIR))")
+end
+
+debug(make_directories, get_objects)
+    ("!($(CXX) -Wall -santize=all !(ls $(OBJECT_DIR)/*.o) -o $(BINARY_DIR))")
+end
+
+get_objects()
+    ("!($(CXX) -c $(SRC) -o $(OBJECT_DIR))")
+end
+
+make_directories()
+    ("!(mkdir $(BUILD_DIR) | mkdir $(OBJECT_DIR) | mkdir $(BINARY_DIR))")
+end
