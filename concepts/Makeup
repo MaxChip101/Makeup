@@ -9,11 +9,11 @@ _SRC = ("!(ls $(SOURCE_DIR)/*.cpp)")
 ~makeup: build
 ~debug: debug
 
-build(make_directories, get_objects)
+build(make_directories get_objects)
     ("!($(CXX) !(ls $(OBJECT_DIR)/*.o) -o $(BINARY_DIR))")
 end
 
-debug(make_directories, get_objects)
+debug(make_directories get_objects)
     ("!($(CXX) -Wall -santize=all !(ls $(OBJECT_DIR)/*.o) -o $(BINARY_DIR))")
 end
 
