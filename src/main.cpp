@@ -4,6 +4,7 @@
 #include <cstring>
 #include <filesystem>
 #include <unistd.h>
+#include <bits/stdc++.h>
 #include <vector>
 
 using namespace std;
@@ -21,339 +22,29 @@ const char* MAKEUP_DIRECTORY_FLAG = "--directory";
 
 typedef enum
 {
-    TOKEN_LPAREN,
-    TOKEN_RPAREN,
-    TOKEN_LBRACE,
-    TOKEN_RBRACE,
-    TOKEN_STR,
+    TOKEN_UNKOWN,
+    TOKEN_SYMBOL,
+    TOKEN_LIT,
     TOKEN_VAR,
     TOKEN_VARREF,
     TOKEN_FUNC,
     TOKEN_FUNCREF,
     TOKEN_MAKEUP_FUNC,
-    TOKEN_EQUALS,
-    TOKEN_AT,
-    TOKEN_AND,
-    TOKEN_DOLLAR,
-    TOKEN_COMMA,
     TOKEN_EOF,
 } TokenType;
 
 typedef struct
 {
-    TokenType type;
     string value;
+    TokenType type;
     int line;
+    int col;
 } Token;
 
-typedef struct
-{
-    Token variable;
-    vector<Token> value;
-} Variable;
+map<string, string> variables;
+map<string, int> functions;
 
-vector<Token> tokenize(string content)
-{
-    vector<Token> tokens;
-    Token _token;
-    unsigned int line = 1;
-    unsigned int i = 0;
-
-    while(content[i] != '\0')
-    {
-        // skipping whitespaces
-        while(content[i] == ' ' || content[i] == '\t' || content[i] == '\r')
-        {
-            i++;
-        }
-
-        if(isalpha(content[i]) || content[i] == '_')
-        {
-            string value = "";
-            while(isalnum(content[i]) || content[i] == '_')
-            {
-                value += content[i];
-                i++;
-            }
-            _token.value = value;
-            _token.type = TOKEN_STR;
-            _token.line = line;
-            tokens.push_back(_token);
-            continue;
-        }
-
-        switch(content[i])
-        {
-            case '\n':
-                i++;
-                line++;
-                continue;
-            case '(':
-                _token.value = "(";
-                _token.type = TOKEN_LPAREN;
-                _token.line = line;
-                tokens.push_back(_token);
-                i++;
-                continue;
-            case ')':
-                _token.value = ")";
-                _token.type = TOKEN_RPAREN;
-                _token.line = line;
-                tokens.push_back(_token);
-                i++;
-                continue;
-            case '{':
-                _token.value = "{";
-                _token.type = TOKEN_LBRACE;
-                _token.line = line;
-                tokens.push_back(_token);
-                i++;
-                continue;
-            case '}':
-                _token.value = "}";
-                _token.type = TOKEN_RBRACE;
-                _token.line = line;
-                tokens.push_back(_token);
-                i++;
-                continue;
-            case '=':
-                _token.value = "=";
-                _token.type = TOKEN_EQUALS;
-                _token.line = line;
-                tokens.push_back(_token);
-                i++;
-                continue;
-            case '$':
-                _token.value = "$";
-                _token.type = TOKEN_DOLLAR;
-                _token.line = line;
-                tokens.push_back(_token);
-                i++;
-                continue;
-            case '&':
-                _token.value = "&";
-                _token.type = TOKEN_AND;
-                _token.line = line;
-                tokens.push_back(_token);
-                i++;
-                continue;
-            case '@':
-                _token.value = "@";
-                _token.type = TOKEN_AT;
-                _token.line = line;
-                tokens.push_back(_token);
-                i++;
-                continue;
-            case ',':
-                _token.value = ",";
-                _token.type = TOKEN_COMMA;
-                _token.line = line;
-                tokens.push_back(_token);
-                i++;
-                continue;
-            default:
-                _token.value = string(1, content[i]);
-                _token.type = TOKEN_STR;
-                _token.line = line;
-                tokens.push_back(_token);
-                i++;
-                continue;
-        }
-    }
-
-    _token.value = "\0";
-    _token.type = TOKEN_EOF;
-    _token.line = line;
-    tokens.push_back(_token);
-    
-    return(tokens);
-}
-
-vector<Token> logicize_tokens(vector<Token> tokens)
-{
-
-    vector<Token> logic_tokens;
-    unsigned int i = 0;
-    
-    Token _token;
-
-    while(tokens[i].type != TOKEN_EOF)
-    {
-        // variable definition
-        if(tokens[i].type == TOKEN_STR && tokens[i+1].type == TOKEN_EQUALS)
-        {
-            _token.value = tokens[i].value;
-            _token.type = TOKEN_VAR;
-            _token.line = tokens[i].line;
-            logic_tokens.push_back(_token);
-            i++;
-            continue;
-        }
-        // funciton definition
-        else if(tokens[i].type == TOKEN_STR && tokens[i].value == "func" && tokens[i+1].type == TOKEN_STR && tokens[i+2].type == TOKEN_LPAREN)
-        {
-            _token.value = tokens[i+2].value;
-            _token.type = TOKEN_FUNC;
-            _token.line = tokens[i+2].line;
-            logic_tokens.push_back(_token);
-            i+=2;
-        }
-        // funciton reference
-        else if(tokens[i].type == TOKEN_AT && tokens[i+1].type == TOKEN_LPAREN && tokens[i+2].type == TOKEN_STR && tokens[i+3].type == TOKEN_RPAREN)
-        {
-            _token.value = tokens[i+2].value;
-            _token.type = TOKEN_FUNCREF;
-            _token.line = tokens[i+2].line;
-            logic_tokens.push_back(_token);
-            i+=4;
-        }
-        // variable reference
-        else if(tokens[i].type == TOKEN_DOLLAR && tokens[i+1].type == TOKEN_LPAREN && tokens[i+2].type == TOKEN_STR && tokens[i+3].type == TOKEN_RPAREN)
-        {
-            _token.value = tokens[i+2].value;
-            _token.type = TOKEN_VARREF;
-            _token.line = tokens[i+2].line;
-            logic_tokens.push_back(_token);
-            i+=4;
-            
-        }
-        // built-in function call
-        else if(tokens[i].type == TOKEN_STR && tokens[i+1].type == TOKEN_LPAREN)
-        {
-            _token.value = tokens[i].value;
-            _token.type = TOKEN_MAKEUP_FUNC;
-            _token.line = tokens[i].line;
-            logic_tokens.push_back(_token);
-            i++;
-        }
-        // pass tokens
-        else
-        {
-            _token.value = tokens[i].value;
-            _token.type = tokens[i].type;
-            _token.line = tokens[i].line;
-            logic_tokens.push_back(_token);
-            i++;
-            continue;
-        }
-    }
-
-    return(logic_tokens);
-}
-
-int parse(vector<Token> tokens)
-{
-    unsigned int i = 0;
-    while(i < tokens.size())
-    {
-        if(tokens[i].type == TOKEN_VAR)
-        {
-            /*
-            int _iterator = i;
-            while (tokens[i].line == tokens[i].line)
-            {
-
-                _iterator++;
-            }
-            */
-            i++;
-            // do variable checking
-        }
-        else if(tokens[i].type == TOKEN_MAKEUP_FUNC)
-        {
-            if(strcmp(tokens[i].value.c_str(), "scan") == 0 || strcmp(tokens[i].value.c_str(), "map") == 0)
-            {
-                i++;
-            }
-            else
-            {
-                cerr << "makeup: '" << tokens[i].value << "' is not an existing Makeup function, line: " << tokens[i].line << endl;
-                exit(EXIT_FAILURE);
-            }
-        }
-        else
-        {
-            i++;
-        }
-    }
-    return 0;
-}
-
-Token makeup_scan()
-{
-
-}
-
-Token makeup_map()
-{
-    
-}
-
-int interperet(vector<Token> tokens)
-{
-    vector<Token> new_tokens;
-    vector<Variable> variables;
-
-    for(size_t i = 0; i < tokens.size(); i++)
-    {
-        if(tokens[i].type == TOKEN_VAR)
-        {
-            for(size_t iterator = 0; iterator < variables.size(); iterator++)
-            {
-                if(strcmp(tokens[i].value.c_str(), variables[iterator].variable.value.c_str()) == 0)
-                {
-                    cerr << "makeup: Variable '" << variables[iterator].variable.value << "' already exists on line: " << variables[iterator].variable.line << ", line: " << tokens[i].line << endl;
-                    exit(EXIT_FAILURE);
-                }
-            }
-
-            unsigned int _iterator = i;
-            vector<Token> _temp_value;
-            while (tokens[i].line == tokens[_iterator].line)
-            {
-                _temp_value.push_back(tokens[_iterator]);
-                _iterator++;
-            }
-            
-            Variable _var;
-            _var.variable  = tokens[i];
-            _var.value = _temp_value;
-            
-            variables.push_back(_var);
-            i+=_iterator;
-        }
-        else if(tokens[i].type == TOKEN_VARREF)
-        {
-            bool _found = false;
-            for(size_t iterator = 0; iterator < variables.size(); iterator++)
-            {
-                if(strcmp(tokens[i].value.c_str(), variables[iterator].variable.value.c_str()) == 0)
-                {
-                    for(size_t iterator2 = 0; iterator2 < variables[iterator].value.size(); i++)
-                    {
-                    }
-                    tokens[i].value = 
-                    _found = true;
-                }
-            }
-
-            if(!_found)
-            {
-                cerr << "makeup: Variable '" << tokens[i].value << "' does not exist, line: " << tokens[i].line << endl;
-                exit(EXIT_FAILURE);
-            }
-
-
-
-        }
-        else
-        {
-            new_tokens.push_back(tokens[i]);
-        }
-        // do makeup execution
-    }
-    return(0);
-}
+vector<Token> tokenize(string content);
 
 int main(int argc, char* argv[])
 {
@@ -397,13 +88,148 @@ int main(int argc, char* argv[])
         content.push_back('\n');
     }
     makeup_file.close();
-    vector<Token> tokens = logicize_tokens(tokenize(content));
-    if(parse(tokens) == 0)
+
+    return(0);
+}
+
+vector<Token> tokenize(string content)
+{
+    int index = 0;
+    int line = 1;
+    int col = 1;
+    bool in_variable = false;
+    TokenType type;
+    string value = "";
+    vector<Token> tokens;
+    while(content[index] != '\0')
     {
-        if(interperet(tokens) == 0)
+        if(isalpha(content[index]) || content[index] == '_')
         {
-            cout << "complete" << endl;
+            type = TOKEN_LIT;
+            int start = index;
+            int index2 = 0;
+            while (isalnum(content[start + index2]) || content[start + index2] == '_')
+            {
+                value.push_back(content[start + index2]);
+                index2++;
+            }
+            index += index2;
+        }
+        else
+        {
+            if(content[index] == '=')
+            {
+                in_variable = true;
+            }
+            else if(content[index] == '\n') { // make it so that double quotes preserve white spaces and work on shell commands in variables and stuff and make the tokens become strings in variable declarations
+                line++;
+                col = 0;
+                in_variable = false;
+            }
+            else if(content[index] == ' ' || content[index] == '\t' && !in_variable)
+            {
+                col++;
+                continue;
+            }
+            value = content[index];
+            type = TOKEN_SYMBOL;
+        }
+        tokens.push_back(Token{.value = "", .type = type, .line = line, .col = col});
+        col++;
+        index++;
+    }
+
+    tokens.push_back(Token{.value = "\0", .type = TOKEN_EOF, .line = line, .col = col});
+
+    return(tokens);
+}
+
+void initialize_functions(vector<Token> tokens)
+{
+
+}
+
+void initialize_variables(vector<Token> tokens)
+{
+    map<string, vector<Token>> pre_variables;
+    
+    int index = 0;
+    while(tokens[index].type != TOKEN_EOF)
+    {
+        if(tokens[index].type == TOKEN_LIT && tokens[index+1].value.compare("="))
+        {
+            int start = index;
+            int index2 = 0;
+            vector<Token> value;
+            while(!tokens[start + index2].value.compare("\n") && tokens[start + index2].type != TOKEN_EOF)
+            {
+                value.push_back(tokens[start + index2]);
+                index2++;
+            }
+            value.push_back(Token{.value = "\0", .type = TOKEN_EOF, .line = 0, .col = 0});
+            pre_variables.insert({tokens[index].value, value});
         }
     }
-    return(0);
+
+    index = 0;
+    bool restart = true;
+    while(tokens[index].type != TOKEN_EOF)
+    {
+        if(tokens[index].type == TOKEN_LIT && tokens[index+1].value.compare("="))
+        {
+            vector<Token> value = pre_variables[tokens[index].value];
+            vector<Token> new_value;
+            int index2 = 0;
+            while (value[index2].type != TOKEN_EOF)
+            {
+                if(value[index2].value.compare("$") && value[index2+1].value.compare("(") && value[index2+3].value.compare(")"))
+                {
+                    restart = true;
+                    if(value[index2+2].type != TOKEN_LIT || !pre_variables.count(value[index2+2].value) || tokens[index].value.compare(value[index2+2].value))
+                    {
+                        printf("variable reference error at line=%i, column=%i", value[index2+2].line, value[index2+2].col);
+                        exit(1);
+                    }
+                    for(Token token : pre_variables[value[index2+2].value])
+                    {
+                        new_value.push_back(token);
+                    }
+                    index2 += 3;
+                }
+                else
+                {
+                    new_value.push_back(tokens[index2]);
+                }
+                index2++;
+            }
+            pre_variables[value[index2+2].value] = new_value;
+        }
+
+        if(restart)
+        {
+            index = 0;
+            restart = false;
+        }
+    }
+
+    index = 0;
+    while(tokens[index].type != TOKEN_EOF)
+    {
+        if(tokens[index].type == TOKEN_LIT && tokens[index+1].value.compare("="))
+        {
+            vector<Token> value = pre_variables[tokens[index].value];
+            string new_value = "";
+            int index2 = 0;
+            while (value[index2].type != TOKEN_EOF)
+            {
+                new_value.append(value[index2].value);
+                index2++;
+            }
+        }
+    }
+}
+
+void initialize_interperet(vector<Token> tokens)
+{
+
 }
