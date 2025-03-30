@@ -97,7 +97,7 @@ vector<Token> tokenize(string content)
     int index = 0;
     int line = 1;
     int col = 1;
-    bool in_variable = false;
+    bool inlcude_spaces = false;
     TokenType type;
     string value = "";
     vector<Token> tokens;
@@ -117,16 +117,21 @@ vector<Token> tokenize(string content)
         }
         else
         {
-            if(content[index] == '=')
+            if(content[index] == '(' && content[index+1 == '\"' && !include_spaces)
             {
-                in_variable = true;
+                include_spaces = true;
+                index+=2;
+            }
+            else if(content[index] == '\"' && content[index+1 == ')' && !include_spaces)
+            {
+                include_spaces = false;
+                index+=2;
             }
             else if(content[index] == '\n') { // make it so that double quotes preserve white spaces and work on shell commands in variables and stuff and make the tokens become strings in variable declarations
                 line++;
                 col = 0;
-                in_variable = false;
             }
-            else if(content[index] == ' ' || content[index] == '\t' && !in_variable)
+            else if(content[index] == ' ' || content[index] == '\t' && !include_spaces)
             {
                 col++;
                 continue;
