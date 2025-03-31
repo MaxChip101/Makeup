@@ -42,6 +42,7 @@ typedef struct {
 
 std::map<std::string, std::string> variables;
 std::map<std::string, int> functions;
+std::map<std::string, std::string> argument_calls;
 
 std::vector<Token> tokenize(std::string content);
 std::string exec(const std::string &cmd);
@@ -333,6 +334,22 @@ void initialize_variables(std::vector<Token> tokens) {
             index++;
         }
     }
+}
+
+void initialize_argument_calls(std::vector<Token> tokens) {
+    size_t index = 0;
+    while (tokens[index].type != TOKEN_EOF) {
+        if (index + 2 < tokens.size() && tokens[index].value == "~" &&
+            tokens[index+1].type == TOKEN_LIT && tokens[index+2].value == ":" &&
+            tokens[index+3].type == TOKEN_LIT && functions.count(tokens[index+3].value)) {
+            string argument = tokens[index+1].value;
+            string function = tokens[index+3].value;
+            argument_calls[argument] = function;
+        }
+    }
+}
+void initialize_shell_commands() {
+    
 }
 
 void interperet(std::vector<Token> tokens) {
