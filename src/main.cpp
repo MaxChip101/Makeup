@@ -94,7 +94,7 @@ int main(int argc, char *argv[]) {
 
     std::string buffer;
     while (getline(makeup_file, buffer)) {
-        content += buffer;
+        content.append(buffer);
         content.push_back('\n');
     }
     makeup_file.close();
@@ -113,7 +113,7 @@ std::vector<Token> tokenize(std::string content) {
     bool include_spaces = false;
     bool commented = false;
     TokenType type;
-    std::string value = "";
+    std::string value;
     std::vector<Token> tokens;
     while (index < content.length() && content[index] != '\0') {
         if (!commented && !value.empty()) {
@@ -188,7 +188,7 @@ std::string exec(const std::string &cmd) {
 
     while (!feof(pipe)) {
         if (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-            result += buffer;
+            result.append(buffer);
         }
     }
 
@@ -197,8 +197,8 @@ std::string exec(const std::string &cmd) {
 }
 
 std::string shell_command(std::string input) {
-    std::string final_string = "";
-    std::string reversed_string = "";
+    std::string final_string;
+    std::string reversed_string;
     for (size_t index = input.length(); index-- > 0;) {
         if (index + 1 < input.length() && input[index] == '!' &&
             input[index + 1] == '(') {
@@ -211,18 +211,18 @@ std::string shell_command(std::string input) {
             }
             std::string value = exec(command);
             for (size_t index3 = value.length(); index3-- > 0;) {
-                reversed_string += value[index3];
+                reversed_string.push_back(value[index3]);
             }
             index = index2;
         } else if (input[index] == ')') {
             continue;
         } else {
-            reversed_string += input[index];
+            reversed_string.push_back(input[index]);
         }
     }
 
     for (int index2 = reversed_string.length() - 1; index2 >= 0; index2--) {
-        final_string += reversed_string[index2];
+        final_string.push_back(reversed_string[index2]);
     }
 
     return final_string;
@@ -268,7 +268,7 @@ void initialize_variables(std::vector<Token> tokens) {
 
     index = 0;
     bool restart = false;
-    while (index < tokens.size() && tokens[index].type != TOKEN_EOF) {
+    while (tokens[index].type != TOKEN_EOF) {
         if (index + 2 < tokens.size() && tokens[index].value == "_" &&
             tokens[index + 1].type == TOKEN_LIT &&
             tokens[index + 2].value == "=") {
