@@ -268,7 +268,7 @@ void initialize_variables(std::vector<Token> tokens) {
 
     index = 0;
     bool restart = false;
-    while (tokens[index].type != TOKEN_EOF) {
+    while (index < tokens.size() && tokens[index].type != TOKEN_EOF) {
         if (index + 2 < tokens.size() && tokens[index].value == "_" &&
             tokens[index + 1].type == TOKEN_LIT &&
             tokens[index + 2].value == "=") {
