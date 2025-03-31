@@ -60,9 +60,9 @@ int main(int argc, char *argv[]) {
     if (strcmp(argv[1], MAKEUP_COMMANDS_FLAG_SHORT) == 0 ||
         strcmp(argv[1], MAKEUP_COMMANDS_FLAG) == 0) {
       std::cout << "Options:\n " << MAKEUP_COMMANDS_FLAG_SHORT << ", "
-                << MAKEUP_COMMANDS_FLAG << "\tPrints list of commands.\n "
+                << MAKEUP_COMMANDS_FLAG << "\t\tPrints list of commands.\n "
                 << MAKEUP_VERSION_FLAG_SHORT << ", " << MAKEUP_VERSION_FLAG
-                << "\tPrints Makeup version.\n " << MAKEUP_DIRECTORY_FLAG_SHORT
+                << "\t\tPrints Makeup version.\n " << MAKEUP_DIRECTORY_FLAG_SHORT
                 << ", " << MAKEUP_DIRECTORY_FLAG
                 << "\tPrints the current working directory." << std::endl;
       exit(EXIT_SUCCESS);
