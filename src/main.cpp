@@ -14,12 +14,12 @@
 const char *MAKEUP_VERSION = "0.0.1";
 
 // Flags
-const char *MAKEUP_VERSION_FLAG_SHORT = "-v";
-const char *MAKEUP_VERSION_FLAG = "--version";
-const char *MAKEUP_COMMANDS_FLAG_SHORT = "-h";
-const char *MAKEUP_COMMANDS_FLAG = "--help";
-const char *MAKEUP_DIRECTORY_FLAG_SHORT = "-d";
-const char *MAKEUP_DIRECTORY_FLAG = "--directory";
+const std::string MAKEUP_VERSION_FLAG_SHORT = "-v";
+const std::string MAKEUP_VERSION_FLAG = "--version";
+const std::string MAKEUP_COMMANDS_FLAG_SHORT = "-h";
+const std::string MAKEUP_COMMANDS_FLAG = "--help";
+const std::string MAKEUP_DIRECTORY_FLAG_SHORT = "-d";
+const std::string MAKEUP_DIRECTORY_FLAG = "--directory";
 
 typedef enum {
     TOKEN_UNKOWN,
@@ -57,8 +57,8 @@ int main(int argc, char *argv[]) {
 
     // check for flags
     if (argc > 1) {
-        if (strcmp(argv[1], MAKEUP_COMMANDS_FLAG_SHORT) == 0 ||
-            strcmp(argv[1], MAKEUP_COMMANDS_FLAG) == 0) {
+        if (argv[1] == MAKEUP_COMMANDS_FLAG_SHORT ||
+            argv[1] == MAKEUP_COMMANDS_FLAG) {
             std::cout << "Options:\n " << MAKEUP_COMMANDS_FLAG_SHORT << ", "
                       << MAKEUP_COMMANDS_FLAG
                       << "\t\tPrints list of commands.\n "
@@ -68,12 +68,12 @@ int main(int argc, char *argv[]) {
                       << MAKEUP_DIRECTORY_FLAG
                       << "\tPrints the current working directory." << std::endl;
             exit(EXIT_SUCCESS);
-        } else if (strcmp(argv[1], MAKEUP_VERSION_FLAG) == 0 ||
-                   strcmp(argv[1], MAKEUP_VERSION_FLAG_SHORT) == 0) {
+        } else if (argv[1] == MAKEUP_VERSION_FLAG ||
+                   argv[1] == MAKEUP_VERSION_FLAG_SHORT) {
             std::cout << "Makeup version " << MAKEUP_VERSION << std::endl;
             exit(EXIT_SUCCESS);
-        } else if (strcmp(argv[1], MAKEUP_DIRECTORY_FLAG) == 0 ||
-                   strcmp(argv[1], MAKEUP_DIRECTORY_FLAG_SHORT) == 0) {
+        } else if (argv[1] == MAKEUP_DIRECTORY_FLAG ||
+                   argv[1] == MAKEUP_DIRECTORY_FLAG_SHORT) {
             std::cout << std::filesystem::current_path() << std::endl;
             exit(EXIT_SUCCESS);
         }
@@ -90,18 +90,18 @@ int main(int argc, char *argv[]) {
                   << std::endl;
         exit(EXIT_FAILURE);
     }
-    std::string content;
 
     std::string buffer;
-    while (getline(makeup_file, buffer)) {
-        content.append(buffer);
-        content.push_back('\n');
+    std::string line;
+    while (getline(makeup_file, line)) {
+        buffer.append(line);
+        buffer.push_back('\n');
     }
     makeup_file.close();
 
-    content.push_back('\0');
+    buffer.push_back('\0');
 
-    interperet(tokenize(content));
+    interperet(tokenize(buffer));
 
     return (0);
 }
@@ -121,7 +121,7 @@ std::vector<Token> tokenize(std::string content) {
                 Token{.value = value, .type = type, .line = line, .col = col});
         }
 
-        value.clear();  // Use this instead of `value = "";`
+        value.clear();
 
         if (isalpha(content[index])) {
             type = TOKEN_LIT;
