@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include <memory>
+
 // Definitions
 const char *MAKEUP_VERSION = "0.0.1";
 
@@ -22,14 +24,9 @@ const std::string MAKEUP_DIRECTORY_FLAG_SHORT = "-d";
 const std::string MAKEUP_DIRECTORY_FLAG = "--directory";
 
 typedef enum {
-    TOKEN_UNKOWN,
     TOKEN_SYMBOL,
     TOKEN_LIT,
-    TOKEN_VAR,
-    TOKEN_VARREF,
-    TOKEN_FUNC,
-    TOKEN_FUNCREF,
-    TOKEN_MAKEUP_FUNC,
+    TOKEN_NUM,
     TOKEN_EOF,
 } TokenType;
 
@@ -43,9 +40,10 @@ typedef struct {
 std::map<std::string, std::string> variables;
 std::map<std::string, int> functions;
 std::map<std::string, std::string> argument_calls;
+std::map<int, std::string> shell_commands;
 
 std::vector<Token> tokenize(std::string content);
-std::string exec(const std::string &cmd);
+std::string exec(const char *cmd);
 std::string shell_command(std::string input);
 void initialize_functions(std::vector<Token> tokens);
 void initialize_variables(std::vector<Token> tokens);
@@ -116,73 +114,82 @@ std::vector<Token> tokenize(std::string content) {
     TokenType type;
     std::string value;
     std::vector<Token> tokens;
+    
     while (index < content.length() && content[index] != '\0') {
-        if (!commented && !value.empty()) {
+        if (content[index] == '#') {
+            commented = !commented;
+            if (!commented) {
+                index++;
+                col++;
+            }
+            continue;
+        } else if (content[index] == '\n') {
+            commented = false;
+            value = '\n';
+            type = TOKEN_SYMBOL;
+            line++;
+            index++;
+            col = 0;
+        } else if (isalpha(content[index])) {
+            value.clear();
+            while (index < content.length() && (isalnum(content[index]) || content[index] == '_')) {
+                value.push_back(content[index]);
+                index++;
+                col++;
+            }
+            type = TOKEN_LIT;
+        } else if (isdigit(content[index])) {
+            value.clear();
+            while (index < content.length() && isdigit(content[index])) {
+                value.push_back(content[index]);
+                index++;
+                col++;
+            }
+            type = TOKEN_NUM;
+        } else {
+            if ((content[index] == ' ' || content[index] == '\t') && !include_spaces) {
+                index++;
+                col++;
+                continue;
+            } else if (index + 1 < content.length() && content[index] == '(' && content[index+1] == '\"' && !include_spaces) {
+                index += 2;
+                col++;
+                include_spaces = true;
+                continue;
+            } else if (index + 1 < content.length() && content[index] == '\"' && content[index+1] == ')' && include_spaces) {
+                index += 2;
+                col++;
+                include_spaces = false;
+                continue;
+            } else {
+                type = TOKEN_SYMBOL;
+                value = content[index];
+                col++;
+                index++;
+            }
+        }
+
+        if (commented) {
+            index++;
+            col++;
+            continue;
+        } else {
             tokens.push_back(
                 Token{.value = value, .type = type, .line = line, .col = col});
         }
-
-        value.clear();
-
-        if (isalpha(content[index])) {
-            type = TOKEN_LIT;
-            size_t start = index;
-            size_t index2 = 0;
-
-            while ((start + index2 < content.length() &&
-                    isalnum(content[start + index2])) ||
-                   content[start + index2] == '_') {
-                value.push_back(content[start + index2]);
-                index2++;
-            }
-            index += index2;
-            col += index2;
-        } else {
-            if (content[index] == '(' && content[index + 1] == '\"' &&
-                !include_spaces) {
-                include_spaces = true;
-                index += 2;
-                col += 2;
-            } else if (index + 2 < content.length() && content[index] == '\"' &&
-                       content[index + 1] == ')' && !include_spaces) {
-                include_spaces = false;
-                index += 2;
-                col += 2;
-                continue;
-            } else if (content[index] == '\n') {
-                line++;
-                col = 0;
-                index++;
-                commented = false;
-            } else if ((content[index] == ' ' || content[index] == '\t') &&
-                       !include_spaces) {
-                col++;
-                index++;
-                continue;
-            } else if (content[index] == '#') {
-                commented = !commented;
-                col++;
-                index++;
-                continue;
-            } else {
-                col++;
-                index++;
-            }
-            value = content[index];
-            type = TOKEN_SYMBOL;
-        }
     }
+    
     tokens.push_back(
         Token{.value = "\0", .type = TOKEN_EOF, .line = line, .col = col});
 
     return (tokens);
 }
 
-std::string exec(const std::string &cmd) {
+std::string exec(const char *cmd) {
     std::string result;
     char buffer[128];
 
-    FILE *pipe = popen(cmd.c_str(), "r");
+    FILE *pipe = popen(cmd, "r");
     if (!pipe) {
         return "\0";
     }
@@ -198,35 +205,36 @@ std::string exec(const std::string &cmd) {
 }
 
 std::string shell_command(std::string input) {
-    std::string final_string;
-    std::string reversed_string;
-    for (size_t index = input.length(); index-- > 0;) {
-        if (index + 1 < input.length() && input[index] == '!' &&
-            input[index + 1] == '(') {
-            index += 2;
-            size_t index2 = index;
-            std::string command = "";
-            while (index2 < input.length() && input[index2] != ')') {
-                command.push_back(input[index2]);
-                index2++;
+    std::vector<std::string> stack;
+    size_t stack_num = 0;
+    size_t index = 0;;
+
+    stack.push_back("");
+
+    while (index < input.length() && input[index] != '\0') {
+        if(index + 1 < input.length() && input[index] == '!' && input[index+1] == '(') {
+            index +=2;
+            stack_num++;
+            if(stack.size() <= stack_num) {
+                stack.push_back("");
+            } else {
+                stack[stack_num].clear();
             }
-            std::string value = exec(command);
-            for (size_t index3 = value.length(); index3-- > 0;) {
-                reversed_string.push_back(value[index3]);
-            }
-            index = index2;
-        } else if (input[index] == ')') {
             continue;
-        } else {
-            reversed_string.push_back(input[index]);
+        } else if(input[index] == ')') {
+            std::string command = exec(stack[stack_num].c_str());
+            stack[stack_num - 1].append(command);
+            stack_num--;
+            index++;
+            continue;
         }
+        stack[stack_num].push_back(input[index]);
+        index++;
     }
 
-    for (int index2 = reversed_string.length() - 1; index2 >= 0; index2--) {
-        final_string.push_back(reversed_string[index2]);
-    }
+    std::cout << '(' << stack[0] << ')' << std::endl;
 
-    return final_string;
+    return stack[0];
 }
 
 void initialize_functions(std::vector<Token> tokens) {
@@ -245,20 +253,21 @@ void initialize_variables(std::vector<Token> tokens) {
 
     size_t index = 0;
     while (index < tokens.size() && tokens[index].type != TOKEN_EOF) {
-        if (index + 2 < tokens.size() && tokens[index].value == "_" &&
+        if (index + 2 < tokens.size() && tokens[index].value == ":" &&
             tokens[index + 1].type == TOKEN_LIT &&
             tokens[index + 2].value == "=") {
-            std::string var_name = tokens[index + 1].value;
-            size_t start = index + 3;
-            size_t index2 = 0;
+            
+            index += 3;
+
+            std::string var_name = tokens[index].value;
+
             std::vector<Token> value;
-            while (start + index2 < tokens.size() &&
-                   tokens[start + index2].value != "\n" &&
-                   tokens[start + index2].type != TOKEN_EOF) {
-                value.push_back(tokens[start + index2]);
-                index2++;
+
+            while (tokens[index].value != "\n") {
+                value.push_back(tokens[index]);
+                index++;
             }
-            index = start + index2;
+
             value.push_back(
                 Token{.value = "\0", .type = TOKEN_EOF, .line = 0, .col = 0});
             pre_variables[var_name] = value;
@@ -270,7 +279,7 @@ void initialize_variables(std::vector<Token> tokens) {
     index = 0;
     bool restart = false;
     while (index < tokens.size() && tokens[index].type != TOKEN_EOF) {
-        if (index + 2 < tokens.size() && tokens[index].value == "_" &&
+        if (index + 2 < tokens.size() && tokens[index].value == ":" &&
             tokens[index + 1].type == TOKEN_LIT &&
             tokens[index + 2].value == "=") {
             std::string var_name = tokens[index + 1].value;
@@ -318,7 +327,7 @@ void initialize_variables(std::vector<Token> tokens) {
 
     index = 0;
     while (index < tokens.size() && tokens[index].type != TOKEN_EOF) {
-        if (index + 2 < tokens.size() && tokens[index].value == "_" &&
+        if (index + 2 < tokens.size() && tokens[index].value == ":" &&
             tokens[index + 1].type == TOKEN_LIT &&
             tokens[index + 2].value == "=") {
             std::string var_name = tokens[index + 1].value;
@@ -329,6 +338,7 @@ void initialize_variables(std::vector<Token> tokens) {
                 }
             }
             variables[var_name] = new_value;
+            std::cout << new_value << std::endl;
             index += 3;
         } else {
             index++;
@@ -339,17 +349,36 @@ void initialize_variables(std::vector<Token> tokens) {
 void initialize_argument_calls(std::vector<Token> tokens) {
     size_t index = 0;
     while (tokens[index].type != TOKEN_EOF) {
-        if (index + 2 < tokens.size() && tokens[index].value == "~" &&
+        if (index + 3 < tokens.size() && tokens[index].value == "~" &&
             tokens[index+1].type == TOKEN_LIT && tokens[index+2].value == ":" &&
             tokens[index+3].type == TOKEN_LIT && functions.count(tokens[index+3].value)) {
-            string argument = tokens[index+1].value;
-            string function = tokens[index+3].value;
+            std::string argument = tokens[index+1].value;
+            std::string function = tokens[index+3].value;
             argument_calls[argument] = function;
+            index += 3;
+        }
+        else
+        {
+            index++;
         }
     }
 }
-void initialize_shell_commands() {
-    
+void initialize_shell_commands(std::vector<Token> tokens) {
+    size_t index = 0;
+    while (tokens[index].type != TOKEN_EOF) {
+        if (index + 1 < tokens.size() && tokens[index].value == "!" &&
+            tokens[index+1].value == "(") {
+            std::string value = "";
+            while (index < tokens.size() && tokens[index].value != "\n") {
+                value.append(tokens[index].value);
+                index++;
+            }
+        }
+        else
+        {
+            index++;
+        }
+    }
 }
 
 void interperet(std::vector<Token> tokens) {
@@ -358,6 +387,7 @@ void interperet(std::vector<Token> tokens) {
 
     size_t index = 0;
     while (tokens[index].type != TOKEN_EOF) {
+        //std::cout << tokens[index].value << "\n" ;
         index++;
     }
 }
