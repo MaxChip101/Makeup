@@ -205,11 +205,9 @@ std::string exec(const char *cmd) {
 }
 
 std::string shell_command(std::string input) {
-    std::vector<std::string> stack;
+    std::vector<std::string> stack = {""};
     size_t stack_num = 0;
     size_t index = 0;;
-
-    stack.push_back("");
 
     while (index < input.length() && input[index] != '\0') {
         if(index + 1 < input.length() && input[index] == '!' && input[index+1] == '(') {
@@ -231,9 +229,6 @@ std::string shell_command(std::string input) {
         stack[stack_num].push_back(input[index]);
         index++;
     }
-
-    std::cout << '(' << stack[0] << ')' << std::endl;
-
     return stack[0];
 }
 
@@ -250,24 +245,18 @@ void initialize_functions(std::vector<Token> tokens) {
 
 void initialize_variables(std::vector<Token> tokens) {
     std::map<std::string, std::vector<Token>> pre_variables;
-
     size_t index = 0;
     while (index < tokens.size() && tokens[index].type != TOKEN_EOF) {
         if (index + 2 < tokens.size() && tokens[index].value == ":" &&
             tokens[index + 1].type == TOKEN_LIT &&
             tokens[index + 2].value == "=") {
-            
-            index += 3;
-
-            std::string var_name = tokens[index].value;
-
+            std::string var_name = tokens[index+1].value;
             std::vector<Token> value;
-
+            index += 3;
             while (tokens[index].value != "\n") {
                 value.push_back(tokens[index]);
                 index++;
             }
-
             value.push_back(
                 Token{.value = "\0", .type = TOKEN_EOF, .line = 0, .col = 0});
             pre_variables[var_name] = value;
@@ -282,35 +271,21 @@ void initialize_variables(std::vector<Token> tokens) {
         if (index + 2 < tokens.size() && tokens[index].value == ":" &&
             tokens[index + 1].type == TOKEN_LIT &&
             tokens[index + 2].value == "=") {
-            std::string var_name = tokens[index + 1].value;
-            std::vector<Token> value = pre_variables[tokens[index].value];
-            std::vector<Token> new_value;
+            std::string var_name = tokens[index+1].value;
+            index += 3;
             size_t index2 = 0;
-            while (index2 < value.size() && value[index2].type != TOKEN_EOF) {
-                if (index2 + 3 < value.size() && value[index2].value == "$" &&
-                    value[index2 + 1].value == "(" &&
-                    value[index2 + 2].type == TOKEN_LIT &&
-                    value[index2 + 3].value == ")") {
-                    std::string ref_var = value[index2 + 2].value;
-
-                    if (value[index2 + 2].type != TOKEN_LIT ||
-                        !pre_variables.count(ref_var) || var_name == ref_var) {
-                        std::cout << "variable reference error at line: "
-                                  << value[index2 + 2].line
-                                  << ", column: " << value[index2 + 2].col
-                                  << std::endl;
-
-                        exit(1);
-                    }
-                    for (const Token &token : pre_variables[ref_var]) {
-                        if (token.type != TOKEN_EOF) {
-                            new_value.push_back(token);
-                        }
-                    }
-                    index2 += 4;
+            std::vector<Token> new_value;
+            while (index2 < pre_variables[var_name].size() && pre_variables[var_name][index2].value != "\n") {
+                if(index2 + 3 < pre_variables[var_name].size() && pre_variables[var_name][index2].value == "$" &&
+                    pre_variables[var_name][index2 + 1].value == "(" &&
+                    pre_variables[var_name][index2 + 2].type == TOKEN_LIT &&
+                    pre_variables[var_name][index2 + 3].value == ")") {
                     restart = true;
+                    std::string var_reference = pre_variables[var_name][index2 + 2].value;
+                    new_value.insert(std::end(new_value), std::begin(pre_variables[var_reference]), std::end(pre_variables[var_reference]));
+                    index2+=4;
                 } else {
-                    new_value.push_back(tokens[index2]);
+                    new_value.push_back(pre_variables[var_name][index2]);
                     index2++;
                 }
             }
@@ -324,7 +299,6 @@ void initialize_variables(std::vector<Token> tokens) {
             index++;
         }
     }
-
     index = 0;
     while (index < tokens.size() && tokens[index].type != TOKEN_EOF) {
         if (index + 2 < tokens.size() && tokens[index].value == ":" &&
@@ -338,7 +312,6 @@ void initialize_variables(std::vector<Token> tokens) {
                 }
             }
             variables[var_name] = new_value;
-            std::cout << new_value << std::endl;
             index += 3;
         } else {
             index++;
@@ -355,7 +328,7 @@ void initialize_argument_calls(std::vector<Token> tokens) {
             std::string argument = tokens[index+1].value;
             std::string function = tokens[index+3].value;
             argument_calls[argument] = function;
-            index += 3;
+            index += 4;
         }
         else
         {
@@ -373,6 +346,7 @@ void initialize_shell_commands(std::vector<Token> tokens) {
                 value.append(tokens[index].value);
                 index++;
             }
+            // put string value into shell map and get the variable references
         }
         else
         {
@@ -384,6 +358,7 @@ void initialize_shell_commands(std::vector<Token> tokens) {
 void interperet(std::vector<Token> tokens) {
     initialize_variables(tokens);
     initialize_functions(tokens);
+    initialize_argument_calls(tokens);
 
     size_t index = 0;
     while (tokens[index].type != TOKEN_EOF) {

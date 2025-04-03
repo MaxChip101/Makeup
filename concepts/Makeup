@@ -1,27 +1,29 @@
-_CXX = g++
-_CXX_FLAGS = -Wall -Wextra -fsanitize=address
-_SOURCE_DIR = src
-_BUILD_DIR = build
-_OBJECT_DIR = $(BUILD_DIR)/objects
-_BINARY_DIR = $(BUILD_DIR)/bin
+:CXX = g++
+:CXX_FLAGS = ("-Wall -Wextra -fsanitize=address")
+:SOURCE_DIR = src
+:BUILD_DIR = build
+:OBJECT_DIR = $(BUILD_DIR)/objects
+:BINARY_DIR = $(BUILD_DIR)/bin
 
-_SRC = ("!(ls $(SOURCE_DIR)/*.cpp)")
+:SRC = ("!sh(ls $(SOURCE_DIR)/*.cpp)")
 
 ~makeup: build
 ~debug: debug
 
 build(make_directories get_objects)
-    ("!($(CXX) $(CXX_FLAGS) !(ls $(OBJECT_DIR)/*.o) -o $(BINARY_DIR))")
+    ("!sh($(CXX) $(CXX_FLAGS) !sh(ls $(OBJECT_DIR)/*.o) -o $(BINARY_DIR))")
 end
 
 debug(make_directories get_objects)
-    ("!($(CXX) $(CXX_FLAGS) !(ls $(OBJECT_DIR)/*.o) -o $(BINARY_DIR))")
+    ("!sh($(CXX) $(CXX_FLAGS) !sh(ls $(OBJECT_DIR)/*.o) -o $(BINARY_DIR))")
 end
 
-get_objects()
-    ("!($(CXX) -c $(SRC) -o $(OBJECT_DIR))")
+get_objects() @halt
+    !mapf($(SRC))
+    ("!sh($(CXX) -c $(SRC) -o $(OBJECT_DIR))")
 end
 
-make_directories()
-    ("!(mkdir $(BUILD_DIR) | mkdir $(OBJECT_DIR) | mkdir $(BINARY_DIR))")
+make_directories() @return
+    !mapdir($(BUILD_DIR) $(OBJECT_DIR) $(BINARY_DIR))
+    ("!sh(mkdir $(BUILD_DIR) | mkdir $(OBJECT_DIR) | mkdir $(BINARY_DIR))")
 end
