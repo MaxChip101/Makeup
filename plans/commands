@@ -1,0 +1,13 @@
+makeup new <optional: name (will use parent directory name if not specified)> // creates a new makeup configuration for the parent directory. Creates a .makeup/ directory to store data for the build system
+
+makeup // direct users to type makeup help
+
+makeup help <optional: section> // prints a list of things for each section, if no section is specified then it will print all the secions and direct the user to type makeup help <section>
+
+makeup details <optional detail> // prints all the details about the configurations like the source directory, build settings, etc if not detail is specified. if the detail is specified then it would only print the details for that thing only
+
+makeup run // runs a project
+
+makeup debug // debug runs a project
+
+makeup build <flags: --force (forces building even if there are no changes)> // release builds a project
