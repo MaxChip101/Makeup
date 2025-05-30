@@ -1,10 +1,12 @@
-makeup new <optional: name (will use parent directory name if not specified)> // creates a new makeup configuration for the parent directory. Creates a .makeup/ directory to store data for the build system
+makeup new <optional: name (will use parent directory name if not specified)> <flags: --<preset_name>(if not specified then it will just be a blank preset, if specified it would generate a makeup configuration based on the preset. A list of presets are: c, cpp, rs, py, go, java, etc)> // creates a new makeup configuration for the parent directory. Creates a .makeup/ directory to store data for the build system
 
 makeup // direct users to type makeup help
 
 makeup help <optional: section> // prints a list of things for each section, if no section is specified then it will print all the secions and direct the user to type makeup help <section>
 
-makeup details <optional detail> // prints all the details about the configurations like the source directory, build settings, etc if not detail is specified. if the detail is specified then it would only print the details for that thing only
+makeup detail <optional detail> // prints all the details about the configurations like the source directory, build settings, etc if not detail is specified. if the detail is specified then it would only print the details for that thing only
+
+makeup set <thing> <value> // set a variables or source path to something
 
 makeup run // runs a project
 
