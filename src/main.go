@@ -23,7 +23,7 @@ func makeup_new_config() {
 	os.Create(".makeup/cache")
 	os.Create(".makeup/config.json")
 
-	content := []byte("vars {\nsrc=\"src\"}")
+	content := []byte("{\n\"src-dir\": \"./src\",\n\"bin-dir\": \"./bin\",\n\"bin-name\": \"bin_name\",\n\"compiler-options\": \"\",\n\"run-options\": \"\",\n\"debug-options\": \"\",\n\"compiler\": \"go build\",\n\"runner\": \"go run\",\n\"debugger\": \"\"\n}")
 	os.WriteFile(".makeup/config.json", content, 0644)
 }
 
