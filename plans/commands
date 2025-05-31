@@ -6,10 +6,16 @@ makeup help <optional: section> // prints a list of things for each section, if 
 
 makeup detail <optional detail> // prints all the details about the configurations like the source directory, build settings, etc if not detail is specified. if the detail is specified then it would only print the details for that thing only
 
-makeup set <thing> <value> // set a variables or source path to something
+makeup set <thing> <variable> <value> // set a variables or source path to something
 
 makeup run // runs a project
 
 makeup debug // debug runs a project
 
 makeup build <flags: --force (forces building even if there are no changes)> // release builds a project
+
+makeup fix
+
+makeup reset
+
+makeup destory

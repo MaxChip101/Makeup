@@ -1,0 +1,3 @@
+.Makeup // makeup directory
+    ->cache // cache files to check for changes
+    ->config.json // configurations which includes variables and directories
