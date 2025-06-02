@@ -21,3 +21,5 @@ makeup reset <flags: -y (skip the double check)> // resets all the values in the
 makeup clear // clears the cache
 
 makeup destory <flags: -y (skip the double check)> // gets rid of makeup in the project
+
+makeup clean // removes the binary directory
