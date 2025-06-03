@@ -1,0 +1,20 @@
+[dean@linux]:~$ makeup new game
+
+project name: fndkjdsckde
+
+Language preset
+> Assembly
+  c
+  C++
+  Rust
+  ...
+
+Description: something here blah blah blah
+
+License
+> Mit
+  GPLv2
+  GPLv3
+  aGPLv3
+
+  

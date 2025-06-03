@@ -13,18 +13,63 @@ import (
 
 const VERSION string = "0.0.1"
 
+type Project struct {
+	Version     string `json:"version"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	License     string `json:"license"`
+}
+
+type Language struct {
+	Name            string   `json:"name"`
+	Compiler        string   `json:"compiler"`
+	Objects         bool     `json:"objects"`
+	File_Extensions []string `json:"file_extensions"`
+	Default_Flags   []string `json:"default_flags"`
+}
+
+type Paths struct {
+	Source   string   `json:"source"`
+	Target   string   `json:"target"`
+	Excluded []string `json:"excluded"`
+}
+
+type Cache struct {
+	Enabled     bool     `json:"enabled"`
+	Directories []string `json:"directories"`
+}
+
+type Build struct {
+	Target_Name string   `json:"target_name"`
+	Libraries   []string `json:"libraries"`
+}
+
+type Release struct {
+	Compile_Flags []string `json:"compile_flags"`
+}
+
+type Debug struct {
+	Compile_Flags []string `json:"compile_flags"`
+}
+
+type Profiles struct {
+	Release Release `json:"release"`
+	Debug   Debug   `json:"debug"`
+}
+
+type Makeup struct {
+	Version string `json:"version"`
+	Debug   bool   `json:"debug"`
+}
+
 type Configs struct {
-	Version       string `json:"version"`
-	Project_name  string `json:"project-name"`
-	Source_path   string `json:"source-path"`
-	Output_path   string `json:"output-path"`
-	Binary_name   string `json:"binary-name"`
-	Compile_flags string `json:"compile-flags"`
-	Run_flags     string `json:"run-flags"`
-	Debug_flags   string `json:"debug-flags"`
-	Compiler      string `json:"compiler"`
-	Runner        string `json:"runner"`
-	Debugger      string `json:"debugger"`
+	Project  Project  `json:"project"`
+	Language Language `json:"language"`
+	Paths    Paths    `json:"paths"`
+	Cache    Cache    `json:"cache"`
+	Build    Build    `json:"build"`
+	Profiles Profiles `json:"profiles"`
+	Makeup   Makeup   `json:"makeup"`
 }
 
 func makeup_exists() (exists bool) {
@@ -97,10 +142,10 @@ func check_version() (up_to_date bool) {
 	return false
 }
 
-func read_json() (content Configs) {
+func read_json(path string) (content Configs) {
 	var data Configs
 
-	readContent, err := os.ReadFile(".makeup/config.json")
+	readContent, err := os.ReadFile(path)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -112,12 +157,12 @@ func read_json() (content Configs) {
 	return data
 }
 
-func write_json(data Configs) {
+func write_json(path string, data Configs) {
 	content, err := json.MarshalIndent(data, "", "	")
 	if err != nil {
 		log.Fatal(err)
 	}
-	os.WriteFile(".makeup/config.json", content, 0644)
+	os.WriteFile(path, content, 0644)
 }
 
 func makeup_fix() {
@@ -147,10 +192,19 @@ func clear_cache() {
 	os.WriteFile(".makeup/cache", []byte{0}, 0644)
 }
 
-func makeup_destroy() {
+func makeup_remove(y_flag_enabled bool) {
 	if !makeup_exists() {
-		fmt.Println("Makeup does not exist in this directory, type 'makeup new' to create a makeup configuration")
 		return
+	}
+
+	var response string
+
+	if !y_flag_enabled {
+		fmt.Print("Are you sure? [Y/n] ")
+		fmt.Scanf("%s", &response)
+		if strings.ToLower(response) != "y" {
+			return
+		}
 	}
 
 	err := os.RemoveAll(".makeup")
@@ -159,49 +213,14 @@ func makeup_destroy() {
 	}
 }
 
-func makeup_set(variable string, value string) {
+func makeup_build(release bool) {
 	if !makeup_exists() || !check_makeup(true) {
 		return
 	}
 
-	data := read_json()
+	data := read_json(".makeup/config.json")
 
-	if variable == "project-name" {
-		data.Project_name = value
-	} else if variable == "source-path" {
-		data.Source_path = value
-	} else if variable == "output-path" {
-		data.Output_path = value
-	} else if variable == "binary-name" {
-		data.Binary_name = value
-	} else if variable == "compiler-flags" {
-		data.Compile_flags = value
-	} else if variable == "run-flags" {
-		data.Run_flags = value
-	} else if variable == "debug-flags" {
-		data.Debug_flags = value
-	} else if variable == "compiler" {
-		data.Compiler = value
-	} else if variable == "runner" {
-		data.Runner = value
-	} else if variable == "debugger" {
-		data.Debugger = value
-	} else {
-		fmt.Println("That variable does not exist/cannot be changed")
-		return
-	}
-
-	write_json(data)
-}
-
-func makeup_build() {
-	if !makeup_exists() || !check_makeup(true) {
-		return
-	}
-
-	data := read_json()
-
-	var files string
+	var args []string
 
 	entries, err := os.ReadDir(data.Source_path)
 
@@ -209,15 +228,20 @@ func makeup_build() {
 		log.Fatal(err)
 	}
 
+	final_ouput_string := data.Output_path + "/" + data.Binary_name
+	compile_flags := strings.Split(data.Compile_flags, " ")
+
+	args = append(args, compile_flags...)
+	args = append(args, "-o", final_ouput_string)
+
 	for _, entry := range entries {
 		if !entry.IsDir() {
-			files += data.Source_path + "/" + entry.Name() + " "
+			args = append(args, data.Source_path+"/"+entry.Name())
 		}
 	}
 
-	final_ouput_string := data.Output_path + "/" + data.Binary_name
+	cmd := exec.Command(data.Compiler, args...)
 
-	cmd := exec.Command(data.Compiler, data.Compile_flags, "-o", final_ouput_string, files)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -227,28 +251,15 @@ func makeup_build() {
 
 }
 
-func makeup_debug() {
+func makeup_clean() {
 	if !makeup_exists() || !check_makeup(true) {
 		return
 	}
-}
 
-func makeup_run() {
-	if !makeup_exists() || !check_makeup(true) {
-		return
-	}
 }
 
 func makeup_help() {
 	fmt.Println("I see you need help")
-}
-
-func makeup_details() {
-	if !makeup_exists() || !check_makeup(true) {
-		return
-	}
-
-	fmt.Println("details")
 }
 
 func makeup_new(name string) {
@@ -261,9 +272,9 @@ func makeup_new(name string) {
 	os.Create(".makeup/cache")
 	os.Create(".makeup/config.json")
 
-	data := Configs{Version: VERSION, Project_name: name, Source_path: "src", Output_path: "bin", Binary_name: name, Compile_flags: "", Run_flags: "", Debug_flags: "", Compiler: "", Runner: "", Debugger: ""}
+	data := Configs{}
 
-	write_json(data)
+	write_json(".makeup/config.json", data)
 }
 
 func main() {
@@ -271,14 +282,11 @@ func main() {
 
 	if len(args) < 2 {
 		fmt.Println("Type 'makeup help' for a list of commands")
+		return
 	}
 
 	if args[1] == "help" || args[1] == "--help" || args[1] == "-h" {
 		makeup_help()
-		return
-	} else if args[1] == "details" {
-		makeup_details()
-
 		return
 	} else if args[1] == "new" {
 		if len(args) < 3 {
@@ -291,25 +299,25 @@ func main() {
 		}
 		makeup_new(args[2])
 		return
-	} else if args[1] == "set" {
-		if len(args) < 4 {
-			fmt.Println("Missing arguments, type 'makeup help' for a list of commands")
-		}
-		makeup_set(args[2], args[3])
 	} else if args[1] == "fix" {
 		makeup_fix()
 		return
 	} else if args[1] == "clear" {
 		clear_cache()
 		return
-	} else if args[1] == "destroy" {
-		makeup_destroy()
+	} else if args[1] == "remove" {
+		if len(args) == 3 && args[2] == "-y" {
+			makeup_remove(true)
+			return
+		}
+		makeup_remove(false)
 		return
-	} else if args[1] == "run" {
-		makeup_run()
-	} else if args[1] == "debug" {
-		makeup_debug()
 	} else if args[1] == "build" {
-		makeup_build()
+		if len(args) == 3 && (args[2] == "--release" || args[2] == "-r") {
+			makeup_build(true)
+			return
+		}
+		makeup_build(false)
+		return
 	}
 }

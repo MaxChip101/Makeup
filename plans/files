@@ -1,3 +1,13 @@
-.Makeup // makeup directory
+.Makeup/ // makeup directory
     ->cache // cache files to check for changes
     ->config.json // configurations which includes variables and directories
+
+bin/
+    ->debug/
+        ->objects/
+            ->objects.o
+        ->binary
+    ->release/
+        ->objects/
+            ->objects.o
+        >binary

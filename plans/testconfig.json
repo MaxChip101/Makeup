@@ -1,0 +1,62 @@
+{
+    "project": {
+        "version": "0.0.1",
+        "name": "Makeup",
+        "description": "A comprehensive build system written in Go",
+        "license": "MIT"
+    },
+    "language": {
+        "name": "C",
+        "compiler": "gcc",
+        "objects": true,
+        "file_extensions": [
+            ".c",
+            ".h"
+        ],
+        "default_flags": [
+            "-Wall",
+            "-Wextra",
+            "-std=c99"
+        ]
+    },
+    "paths": {
+        "source": "src/",
+        "target": "bin/",
+        "excluded": [
+            "test.go",
+            "test1.go",
+            "src/private/"
+        ]
+    },
+    "cache": {
+        "enabled": true,
+        "directories": [
+            "src/"
+        ]
+    },
+    "build": {
+        "target_name": "makeup",
+        "libraries": [
+            "lSDL2",
+            "lncurses"
+        ]
+    },
+    "profiles": {
+        "release": {
+            "compile_flags": [
+                "-O3"
+            ]
+        },
+        "debug": {
+            "compile_flags": [
+                "-O0",
+                "DDEBUG",
+                "-g"
+            ]
+        }
+    },
+    "makeup": {
+        "version": "0.0.1",
+        "debug": false
+    }
+}
