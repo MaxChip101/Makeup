@@ -3,11 +3,31 @@
     ->config.json // configurations which includes variables and directories
 
 bin/
-    ->debug/
-        ->objects/
-            ->objects.o
-        ->binary
-    ->release/
-        ->objects/
-            ->objects.o
-        >binary
+    ->win/
+        ->debug/
+            ->objects/
+                ->objects.o
+            ->binary.exe
+        ->release/
+            ->objects/
+                ->objects.o
+            >binary.exe
+    ->mac/
+        ->debug/
+            ->objects/
+                ->objects.o
+            ->binary.app
+        ->release/
+            ->objects/
+                ->objects.o
+            >binary.app
+    ->lin/
+        ->debug/
+            ->objects/
+                ->objects.o
+            ->binary
+        ->release/
+            ->objects/
+                ->objects.o
+            >binary
+    

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -21,17 +22,27 @@ type Project struct {
 }
 
 type Language struct {
-	Name            string   `json:"name"`
-	Compiler        string   `json:"compiler"`
-	Objects         bool     `json:"objects"`
-	File_Extensions []string `json:"file_extensions"`
-	Default_Flags   []string `json:"default_flags"`
+	Name                  string   `json:"name"`
+	Windows_Compiler      string   `json:"windows_compiler"`
+	Linux_Compiler        string   `json:"linux_compiler"`
+	Mac_Compiler          string   `json:"mac_compiler"`
+	Windows_Linker        string   `json:"windows_linker"`
+	Linux_Linker          string   `json:"linux_linker"`
+	Mac_Linker            string   `json:"mac_linker"`
+	Generate_Object_Files bool     `json:"generate_object_files"`
+	File_Extensions       []string `json:"file_extensions"`
+	Default_Compile_Flags []string `json:"default_compile_flags"`
+	Default_Link_Flags    []string `json:"default_link_flags"`
+	Library_Prefix        string   `json:"library_prefix"`
+	Compile_Prefix        string   `json:"compile_prefix"`
+	Link_Template         string   `json:"link_template"`
+	Compile_Template      string   `json:"compile_template"`
 }
 
 type Paths struct {
-	Source   string   `json:"source"`
-	Target   string   `json:"target"`
-	Excluded []string `json:"excluded"`
+	Source   []string `json:"source"`
+	Artifact string   `json:"artifact"`
+	Exclude  []string `json:"exclude"`
 }
 
 type Cache struct {
@@ -40,26 +51,36 @@ type Cache struct {
 }
 
 type Build struct {
+	Windows     bool     `json:"windows"`
+	Linux       bool     `json:"linux"`
+	Mac         bool     `json:"mac"`
 	Target_Name string   `json:"target_name"`
 	Libraries   []string `json:"libraries"`
 }
 
-type Release struct {
+type Platform struct {
 	Compile_Flags []string `json:"compile_flags"`
+	Link_Flags    []string `json:"link_flags"`
 }
 
-type Debug struct {
-	Compile_Flags []string `json:"compile_flags"`
+type Profile struct {
+	Windows Platform `json:"windows"`
+	Linux   Platform `json:"linux"`
+	Mac     Platform `json:"mac"`
 }
 
 type Profiles struct {
-	Release Release `json:"release"`
-	Debug   Debug   `json:"debug"`
+	Release Profile `json:"release"`
+	Debug   Profile `json:"debug"`
+}
+
+type Hooks struct {
+	Pre_Build  []string `json:"pre_build"`
+	Post_Build []string `json:"post_build"`
 }
 
 type Makeup struct {
 	Version string `json:"version"`
-	Debug   bool   `json:"debug"`
 }
 
 type Configs struct {
@@ -69,6 +90,7 @@ type Configs struct {
 	Cache    Cache    `json:"cache"`
 	Build    Build    `json:"build"`
 	Profiles Profiles `json:"profiles"`
+	Hooks    Hooks    `json:"hooks"`
 	Makeup   Makeup   `json:"makeup"`
 }
 
@@ -108,15 +130,11 @@ func check_makeup(print_error bool) (all_good bool) {
 }
 
 func check_version() (up_to_date bool) {
-	// update to check for verison in the json file
-	content_bytes, err := os.ReadFile(".makeup/version")
-	if err != nil {
-		log.Fatal(err)
-	}
-	content := string(content_bytes)
+	data := read_json(".makeup/config.json")
+	makeup_version := data.Makeup.Version
 
 	this_version := strings.Split(VERSION, ".")
-	project_version := strings.Split(content, ".")
+	project_version := strings.Split(makeup_version, ".")
 
 	up_to_date = false
 
@@ -213,41 +231,242 @@ func makeup_remove(y_flag_enabled bool) {
 	}
 }
 
-func makeup_build(release bool) {
-	if !makeup_exists() || !check_makeup(true) {
-		return
-	}
+func recursive_file_thing(directory string, data Configs) (files []string) {
 
-	data := read_json(".makeup/config.json")
-
-	var args []string
-
-	entries, err := os.ReadDir(data.Source_path)
+	entries, err := os.ReadDir(directory)
 
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	final_ouput_string := data.Output_path + "/" + data.Binary_name
-	compile_flags := strings.Split(data.Compile_flags, " ")
-
-	args = append(args, compile_flags...)
-	args = append(args, "-o", final_ouput_string)
-
 	for _, entry := range entries {
-		if !entry.IsDir() {
-			args = append(args, data.Source_path+"/"+entry.Name())
+		if !slices.Contains(data.Paths.Exclude, entry.Name()) {
+			if entry.IsDir() {
+				files = append(files, recursive_file_thing(directory+"/"+entry.Name(), data)...)
+			} else {
+				files = append(files, directory+"/"+entry.Name())
+			}
+		}
+	}
+	return files
+}
+
+func initialize_directories(data Configs) {
+	os.Mkdir(data.Paths.Artifact, 0644)
+	if data.Build.Windows {
+		os.MkdirAll(data.Paths.Artifact+"/win/debug", 0644)
+		os.Mkdir(data.Paths.Artifact+"/win/release", 0644)
+		if data.Language.Generate_Object_Files {
+			os.Mkdir(data.Paths.Artifact+"/win/release/objects", 0644)
+			os.Mkdir(data.Paths.Artifact+"/win/debug/objects", 0644)
+		}
+	}
+	if data.Build.Linux {
+		os.MkdirAll(data.Paths.Artifact+"/lin/debug", 0644)
+		os.Mkdir(data.Paths.Artifact+"/lin/release", 0644)
+		if data.Language.Generate_Object_Files {
+			os.Mkdir(data.Paths.Artifact+"/lin/release/objects", 0644)
+			os.Mkdir(data.Paths.Artifact+"/lin/debug/objects", 0644)
+		}
+	}
+	if data.Build.Mac {
+		os.MkdirAll(data.Paths.Artifact+"/mac/debug", 0644)
+		os.Mkdir(data.Paths.Artifact+"/mac/release", 0644)
+		if data.Language.Generate_Object_Files {
+			os.Mkdir(data.Paths.Artifact+"/mac/release/objects", 0644)
+			os.Mkdir(data.Paths.Artifact+"/mac/debug/objects", 0644)
+		}
+	}
+}
+
+func linux_build(release bool, data Configs, input_files []string) {
+	var args []string
+	var target string
+	var object_directory string
+	if release {
+		if data.Language.Generate_Object_Files {
+			object_directory = data.Paths.Artifact + "/lin/release/objects/"
+		}
+		target = data.Paths.Artifact + "/lin/release/" + data.Build.Target_Name
+	} else {
+		if data.Language.Generate_Object_Files {
+			object_directory = data.Paths.Artifact + "/lin/debug/objects/"
+		}
+		target = data.Paths.Artifact + "/lin/debug/" + data.Build.Target_Name
+	}
+
+	fmt.Println(object_directory)
+
+	compile_template := strings.Split(data.Language.Compile_Template, " ")
+
+	var libraries []string
+
+	for _, library := range data.Build.Libraries {
+		libraries = append(libraries, data.Language.Library_Prefix+library)
+	}
+
+	for _, arg := range compile_template {
+		switch arg {
+		case "{input_files}":
+			args = append(args, input_files...)
+		case "{flags}":
+			args = append(args, data.Language.Default_Compile_Flags...)
+			if release {
+				args = append(args, data.Profiles.Release.Linux.Compile_Flags...)
+			} else {
+				args = append(args, data.Profiles.Debug.Linux.Compile_Flags...)
+			}
+		case "{target}":
+			args = append(args, target)
+		default:
+			if arg != "{compiler}" {
+				args = append(args, arg)
+			}
 		}
 	}
 
-	cmd := exec.Command(data.Compiler, args...)
+	cmd := exec.Command(data.Language.Linux_Compiler, args...)
+
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		fmt.Println(string(output))
+		log.Fatal(err)
+	}
+
+	fmt.Println(string(output))
+}
+
+func windows_build(release bool, data Configs, input_files []string) {
+	var args []string
+	var target string
+	var object_directory string
+	if release {
+		if data.Language.Generate_Object_Files {
+			object_directory = data.Paths.Artifact + "/lin/release/objects/"
+		}
+		target = data.Paths.Artifact + "/lin/release/" + data.Build.Target_Name
+	} else {
+		if data.Language.Generate_Object_Files {
+			object_directory = data.Paths.Artifact + "/lin/debug/objects/"
+		}
+		target = data.Paths.Artifact + "/lin/debug/" + data.Build.Target_Name
+	}
+
+	fmt.Println(object_directory)
+
+	compile_template := strings.Split(data.Language.Compile_Template, " ")
+
+	var libraries []string
+
+	for _, library := range data.Build.Libraries {
+		libraries = append(libraries, data.Language.Library_Prefix+library)
+	}
+
+	for _, arg := range compile_template {
+		switch arg {
+		case "{input_files}":
+			args = append(args, input_files...)
+		case "{flags}":
+			args = append(args, data.Language.Default_Compile_Flags...)
+			if release {
+				args = append(args, data.Profiles.Release.Linux.Compile_Flags...)
+			} else {
+				args = append(args, data.Profiles.Debug.Linux.Compile_Flags...)
+			}
+		case "{target}":
+			args = append(args, target)
+		default:
+			args = append(args, arg)
+		}
+	}
+	cmd := exec.Command(data.Language.Linux_Compiler, args...)
 
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	fmt.Println(string(output))
+}
+
+func mac_build(release bool, data Configs, input_files []string) {
+	var args []string
+	var target string
+	var object_directory string
+	if release {
+		if data.Language.Generate_Object_Files {
+			object_directory = data.Paths.Artifact + "/lin/release/objects/"
+		}
+		target = data.Paths.Artifact + "/lin/release/" + data.Build.Target_Name
+	} else {
+		if data.Language.Generate_Object_Files {
+			object_directory = data.Paths.Artifact + "/lin/debug/objects/"
+		}
+		target = data.Paths.Artifact + "/lin/debug/" + data.Build.Target_Name
+	}
+
+	fmt.Println(object_directory)
+
+	compile_template := strings.Split(data.Language.Compile_Template, " ")
+
+	var libraries []string
+
+	for _, library := range data.Build.Libraries {
+		libraries = append(libraries, data.Language.Library_Prefix+library)
+	}
+
+	for _, arg := range compile_template {
+		switch arg {
+		case "{input_files}":
+			args = append(args, input_files...)
+		case "{flags}":
+			args = append(args, data.Language.Default_Compile_Flags...)
+			if release {
+				args = append(args, data.Profiles.Release.Linux.Compile_Flags...)
+			} else {
+				args = append(args, data.Profiles.Debug.Linux.Compile_Flags...)
+			}
+		case "{target}":
+			args = append(args, target)
+		default:
+			args = append(args, arg)
+		}
+	}
+	cmd := exec.Command(data.Language.Linux_Compiler, args...)
+
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(string(output))
+}
+
+func makeup_build(platform string, release bool) {
+	if !makeup_exists() || !check_makeup(true) {
+		return
+	}
+
+	data := read_json(".makeup/config.json")
+
+	var source []string
+
+	for _, dir := range data.Paths.Source {
+		source = append(source, recursive_file_thing(dir, data)...)
+	}
+
+	initialize_directories(data)
+
+	switch platform {
+	case "windows":
+		windows_build(release, data, source)
+	case "linux":
+		linux_build(release, data, source)
+	case "mac":
+		mac_build(release, data, source)
+	}
 
 }
 
@@ -314,10 +533,10 @@ func main() {
 		return
 	} else if args[1] == "build" {
 		if len(args) == 3 && (args[2] == "--release" || args[2] == "-r") {
-			makeup_build(true)
+			makeup_build("linux", true)
 			return
 		}
-		makeup_build(false)
+		makeup_build("linux", false)
 		return
 	}
 }
