@@ -1,99 +1,80 @@
 {
     "project": {
         "version": "0.0.1",
-        "name": "Makeup",
-        "description": "A comprehensive build system written in Go",
-        "license": "MIT"
+        "name": "hello",
+        "description": "",
+        "license": ""
     },
     "language": {
-        "name": "C",
-        "windows_compiler": "mingw",
-        "linux_compiler": "cc",
-        "mac_compiler": "idk",
-        "windows_linker": "idk",
-        "linux_linker": "ld",
-        "mac_linker": "idk",
-        "generate_object_files": true,
-        "file_extensions": [
-            ".c",
-            ".h"
-        ],
-        "default_compile_flags": [
-            "-Wall",
-            "-Wextra",
-            "-std=c99"
-        ],
-        "default_link_flags": [],
-        "library_prefix": "-l",
-        "link_template": "{linker} {objects} {flags} {libraries} -o {target}",
-        "compile_template": "{compiler} {input_files} {flags} -o {target}"
+        "name": "Go",
+        "windows_compiler": "",
+        "linux_compiler": "go",
+        "mac_compiler": "",
+        "windows_linker": "",
+        "linux_linker": "",
+        "mac_linker": "",
+        "generate_object_files": false,
+        "file_extensions": null,
+        "default_compile_flags": [],
+        "default_link_flags": null,
+        "library_prefix": "",
+        "compile_prefix": "",
+        "link_template": "",
+        "compile_template": "{compiler} build {flags} -o {target} {input_files}"
     },
     "paths": {
         "source": [
-            "src/"
+            "src"
         ],
-        "artifacts": [
-            "bin/"
-        ],
-        "intermediates": [
-            "obj/"
-        ],
-        "excluded": [
-            "test.go",
-            "test1.go",
-            "src/private/",
-            "src/**/*.bak"
-        ]
+        "artifact": "bin",
+        "exclude": null
     },
     "cache": {
-        "enabled": true,
-        "directories": [
-            "src/",
-            "bin/objs"
-        ]
+        "enabled": false,
+        "directories": null
     },
     "build": {
-        "target_name": "makeup",
-        "libraries": [
-            "SDL2",
-            "ncurses"
-        ]
+        "windows": false,
+        "linux": true,
+        "mac": false,
+        "target_name": "real",
+        "libraries": null
     },
     "profiles": {
         "release": {
-            "compile_flags": [
-                "-O3"
-            ],
-            "link_flags": [],
-            "platforms": {
-                "windows": {
-                    "link_flags": [
-                        "-lws2_32"
-                    ]
-                },
-                "linux": {},
-                "mac": {}
+            "windows": {
+                "compile_flags": null,
+                "link_flags": null
+            },
+            "linux": {
+                "compile_flags": null,
+                "link_flags": null
+            },
+            "mac": {
+                "compile_flags": null,
+                "link_flags": null
             }
         },
         "debug": {
-            "compile_flags": [
-                "-O0",
-                "-DDEBUG",
-                "-g"
-            ],
-            "link_flags": []
+            "windows": {
+                "compile_flags": null,
+                "link_flags": null
+            },
+            "linux": {
+                "compile_flags": null,
+                "link_flags": null
+            },
+            "mac": {
+                "compile_flags": null,
+                "link_flags": null
+            }
         }
     },
     "hooks": {
-        "pre_build": [
-            "config.sh"
-        ],
-        "post_build": [
-            "run_tests.sh"
-        ]
+        "pre_build": null,
+        "post_build": null
     },
     "makeup": {
-        "version": "0.0.1",
-        "default_profile": "debug"
+        "version": ""
     }
 }

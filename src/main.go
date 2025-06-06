@@ -239,7 +239,7 @@ func recursive_file_thing(directory string, data Configs) (files []string) {
 		log.Fatal(err)
 	}
 	for _, entry := range entries {
-		if !slices.Contains(data.Paths.Exclude, entry.Name()) {
+		if !slices.Contains(data.Paths.Exclude, entry.Name()) && slices.Contains(data.Language.File_Extensions, entry.Name()) {
 			if entry.IsDir() {
 				files = append(files, recursive_file_thing(directory+"/"+entry.Name(), data)...)
 			} else {
@@ -304,36 +304,69 @@ func linux_build(release bool, data Configs, input_files []string) {
 		libraries = append(libraries, data.Language.Library_Prefix+library)
 	}
 
-	for _, arg := range compile_template {
-		switch arg {
-		case "{input_files}":
-			args = append(args, input_files...)
-		case "{flags}":
-			args = append(args, data.Language.Default_Compile_Flags...)
-			if release {
-				args = append(args, data.Profiles.Release.Linux.Compile_Flags...)
-			} else {
-				args = append(args, data.Profiles.Debug.Linux.Compile_Flags...)
+	if data.Language.Generate_Object_Files {
+
+		for i := 0; i < len(input_files); i++ {
+			for _, arg := range compile_template {
+				switch arg {
+				case "{input_files}":
+					args = append(args, input_files[0])
+				case "{flags}":
+					args = append(args, data.Language.Default_Compile_Flags...)
+					if release {
+						args = append(args, data.Profiles.Release.Linux.Compile_Flags...)
+					} else {
+						args = append(args, data.Profiles.Debug.Linux.Compile_Flags...)
+					}
+				case "{target}":
+					args = append(args, target)
+				default:
+					if arg != "{compiler}" {
+						args = append(args, arg)
+					}
+				}
 			}
-		case "{target}":
-			args = append(args, target)
-		default:
-			if arg != "{compiler}" {
-				args = append(args, arg)
+			cmd := exec.Command(data.Language.Linux_Compiler, args...)
+			output, err := cmd.CombinedOutput()
+
+			if err != nil {
+				fmt.Println(string(output))
+				log.Fatal(err)
+			}
+
+			fmt.Println(string(output))
+		}
+	} else {
+		for _, arg := range compile_template {
+			switch arg {
+			case "{input_files}":
+				args = append(args, input_files...)
+			case "{flags}":
+				args = append(args, data.Language.Default_Compile_Flags...)
+				if release {
+					args = append(args, data.Profiles.Release.Linux.Compile_Flags...)
+				} else {
+					args = append(args, data.Profiles.Debug.Linux.Compile_Flags...)
+				}
+			case "{target}":
+				args = append(args, target)
+			default:
+				if arg != "{compiler}" {
+					args = append(args, arg)
+				}
 			}
 		}
-	}
+		cmd := exec.Command(data.Language.Linux_Compiler, args...)
+		output, err := cmd.CombinedOutput()
 
-	cmd := exec.Command(data.Language.Linux_Compiler, args...)
+		if err != nil {
+			fmt.Println(string(output))
+			log.Fatal(err)
+		}
 
-	output, err := cmd.CombinedOutput()
-
-	if err != nil {
 		fmt.Println(string(output))
-		log.Fatal(err)
 	}
 
-	fmt.Println(string(output))
 }
 
 func windows_build(release bool, data Configs, input_files []string) {
