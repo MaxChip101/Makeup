@@ -234,7 +234,6 @@ func makeup_remove(y_flag_enabled bool) {
 func recursive_file_thing(directory string, data Configs) (files []string) {
 
 	entries, err := os.ReadDir(directory)
-
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -251,29 +250,29 @@ func recursive_file_thing(directory string, data Configs) (files []string) {
 }
 
 func initialize_directories(data Configs) {
-	os.Mkdir(data.Paths.Artifact, 0644)
+	os.Mkdir(data.Paths.Artifact, 0755)
 	if data.Build.Windows {
-		os.MkdirAll(data.Paths.Artifact+"/win/debug", 0644)
-		os.Mkdir(data.Paths.Artifact+"/win/release", 0644)
+		os.MkdirAll(filepath.Join(data.Paths.Artifact, "win", "debug"), 0755)
+		os.Mkdir(filepath.Join(data.Paths.Artifact, "win", "release"), 0755)
 		if data.Language.Generate_Object_Files {
-			os.Mkdir(data.Paths.Artifact+"/win/release/objects", 0644)
-			os.Mkdir(data.Paths.Artifact+"/win/debug/objects", 0644)
+			os.Mkdir(filepath.Join(data.Paths.Artifact, "win", "release", "objects"), 0755)
+			os.Mkdir(filepath.Join(data.Paths.Artifact, "win", "debug", "objects"), 0755)
 		}
 	}
 	if data.Build.Linux {
-		os.MkdirAll(data.Paths.Artifact+"/lin/debug", 0644)
-		os.Mkdir(data.Paths.Artifact+"/lin/release", 0644)
+		os.MkdirAll(data.Paths.Artifact+"/lin/debug", 0755)
+		os.Mkdir(data.Paths.Artifact+"/lin/release", 0755)
 		if data.Language.Generate_Object_Files {
-			os.Mkdir(data.Paths.Artifact+"/lin/release/objects", 0644)
-			os.Mkdir(data.Paths.Artifact+"/lin/debug/objects", 0644)
+			os.Mkdir(data.Paths.Artifact+"/lin/release/objects", 0755)
+			os.Mkdir(data.Paths.Artifact+"/lin/debug/objects", 0755)
 		}
 	}
 	if data.Build.Mac {
-		os.MkdirAll(data.Paths.Artifact+"/mac/debug", 0644)
-		os.Mkdir(data.Paths.Artifact+"/mac/release", 0644)
+		os.MkdirAll(data.Paths.Artifact+"/mac/debug", 0755)
+		os.Mkdir(data.Paths.Artifact+"/mac/release", 0755)
 		if data.Language.Generate_Object_Files {
-			os.Mkdir(data.Paths.Artifact+"/mac/release/objects", 0644)
-			os.Mkdir(data.Paths.Artifact+"/mac/debug/objects", 0644)
+			os.Mkdir(data.Paths.Artifact+"/mac/release/objects", 0755)
+			os.Mkdir(data.Paths.Artifact+"/mac/debug/objects", 0755)
 		}
 	}
 }
@@ -284,7 +283,7 @@ func linux_build(release bool, data Configs, input_files []string) {
 	var object_directory string
 	if release {
 		if data.Language.Generate_Object_Files {
-			object_directory = data.Paths.Artifact + "/lin/release/objects/"
+			object_directory = data.Paths.Artifact + "/lin/release/objects"
 		}
 		target = data.Paths.Artifact + "/lin/release/" + data.Build.Target_Name
 	} else {
@@ -294,8 +293,6 @@ func linux_build(release bool, data Configs, input_files []string) {
 		target = data.Paths.Artifact + "/lin/debug/" + data.Build.Target_Name
 	}
 
-	fmt.Println(object_directory)
-
 	compile_template := strings.Split(data.Language.Compile_Template, " ")
 
 	var libraries []string
@@ -304,28 +301,35 @@ func linux_build(release bool, data Configs, input_files []string) {
 		libraries = append(libraries, data.Language.Library_Prefix+library)
 	}
 
+	fmt.Println(object_directory + "object.o")
+
 	if data.Language.Generate_Object_Files {
 
 		for i := 0; i < len(input_files); i++ {
+			args = nil
 			for _, arg := range compile_template {
 				switch arg {
 				case "{input_files}":
-					args = append(args, input_files[0])
+					args = append(args, input_files[i])
 				case "{flags}":
 					args = append(args, data.Language.Default_Compile_Flags...)
+					args = append(args, data.Language.Compile_Prefix)
 					if release {
 						args = append(args, data.Profiles.Release.Linux.Compile_Flags...)
 					} else {
 						args = append(args, data.Profiles.Debug.Linux.Compile_Flags...)
 					}
 				case "{target}":
-					args = append(args, target)
+					args = append(args, object_directory+"object.o")
+
 				default:
 					if arg != "{compiler}" {
 						args = append(args, arg)
 					}
 				}
 			}
+
+			fmt.Println(args)
 			cmd := exec.Command(data.Language.Linux_Compiler, args...)
 			output, err := cmd.CombinedOutput()
 
@@ -336,6 +340,57 @@ func linux_build(release bool, data Configs, input_files []string) {
 
 			fmt.Println(string(output))
 		}
+
+		fmt.Println(args)
+
+		args = nil
+
+		entry, err := os.ReadDir(object_directory)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var objects []string
+
+		for _, obj := range entry {
+			objects = append(objects, object_directory+"/"+obj.Name())
+		}
+
+		link_template := strings.Split(data.Language.Link_Template, " ")
+
+		for _, arg := range link_template {
+			switch arg {
+			case "{objects}":
+				args = append(args, objects...)
+			case "{flags}":
+				args = append(args, data.Language.Default_Link_Flags...)
+				if release {
+					args = append(args, data.Profiles.Release.Linux.Link_Flags...)
+				} else {
+					args = append(args, data.Profiles.Debug.Linux.Link_Flags...)
+				}
+			case "{target}":
+				args = append(args, target)
+			case "{libraries}":
+				args = append(args, libraries...)
+			default:
+				if arg != "{linker}" {
+					args = append(args, arg)
+				}
+			}
+		}
+
+		cmd := exec.Command(data.Language.Linux_Linker, args...)
+		output, err := cmd.CombinedOutput()
+
+		if err != nil {
+			fmt.Println(string(output))
+			log.Fatal(err)
+		}
+
+		fmt.Println(string(output))
+
 	} else {
 		for _, arg := range compile_template {
 			switch arg {
