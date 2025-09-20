@@ -1,11 +1,15 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -25,7 +29,7 @@ type Profile struct {
 	RuleSet     json.RawMessage `json:"rule-set"`
 	Template    string          `json:"template"`
 	NextProfile string          `json:"next-profile"`
-	Conditions  []int8          `json:"conditions"`
+	Condition   int             `json:"condition"`
 }
 
 type Profiles struct {
@@ -158,12 +162,11 @@ func CreateProfileCommand(profile Profile) ([]Command, error) {
 		if err != nil {
 			return nil, err
 		}
-		files, err := GetFiles(rule.Directory, rule.Regex, rule.Format)
+		files, err := GetFiles(rule.Directory, rule.Regex, rule.Format, rule.Cache)
 		if err != nil {
 			return nil, err
 		}
 		command := Command{command: pattern[0]}
-		pattern[0] = ""
 		for _, arg := range pattern {
 			switch arg {
 			case "{wildcard}":
@@ -179,21 +182,17 @@ func CreateProfileCommand(profile Profile) ([]Command, error) {
 		if err != nil {
 			return nil, err
 		}
-		wildcard_files, err := GetFiles(rule.WildCardDirectory, rule.WildCardRegex, rule.WildCardFormat)
+		wildcard_files, err := GetFiles(rule.WildCardDirectory, rule.WildCardRegex, rule.WildCardFormat, rule.Cache)
 		if err != nil {
 			return nil, err
 		}
-		mapped_files, err := GetFiles(rule.WildCardDirectory, rule.WildCardRegex, rule.MapFormat)
+		mapped_files, err := GetFiles(rule.WildCardDirectory, rule.WildCardRegex, rule.MapFormat, false)
 		if err != nil {
 			return nil, err
 		}
-		commands = make([]Command, len(wildcard_files))
-		for _, command := range commands {
-			command.command = pattern[0]
-		}
-		pattern[0] = ""
 
-		for index, command := range commands {
+		for index := range wildcard_files {
+			command := Command{command: pattern[0]}
 			for _, arg := range pattern {
 				switch arg {
 				case "{wildcard}":
@@ -204,11 +203,10 @@ func CreateProfileCommand(profile Profile) ([]Command, error) {
 					command.args = append(command.args, arg)
 				} // there might be more variables for template syntax
 			}
+			commands = append(commands, command)
 		}
-
 	default:
 		command := Command{command: pattern[0]}
-		pattern[0] = ""
 		command.args = append(command.args, pattern...)
 		commands = append(commands, command)
 	}
@@ -216,7 +214,7 @@ func CreateProfileCommand(profile Profile) ([]Command, error) {
 	return commands, nil
 }
 
-func GetFiles(directory string, pattern string, format string) ([]string, error) {
+func GetFiles(directory string, pattern string, format string, cache bool) ([]string, error) {
 	entries, err := os.ReadDir(directory)
 	if err != nil {
 		return nil, err
@@ -230,7 +228,22 @@ func GetFiles(directory string, pattern string, format string) ([]string, error)
 	var files []string
 
 	for _, entry := range entries {
-		if regex.MatchString(entry.Name()) {
+		good := true
+
+		if cache {
+			path := filepath.Join(directory, entry.Name())
+			good, err = CheckCache(path)
+			if err != nil {
+				return nil, err
+			}
+			if good {
+				err := CacheFile(path)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+		if regex.MatchString(entry.Name()) && good {
 			files = append(files, Formatter(entry.Name(), format))
 		}
 	}
@@ -249,10 +262,9 @@ func FormatAll(inputs []string, format string) []string {
 func Formatter(input string, format string) string {
 	// * is the input text
 	// - subtracts 1 character from the end
-	// ~* is a regular *
-	// ~- is a regular -
-	// ~~ is a regular ~
-	// i had to change \ to ~ bc of json syntax problems 😑
+	// \* is a regular *
+	// \- is a regular -
+	// \\ is a regular \
 
 	var final string
 
@@ -266,7 +278,7 @@ func Formatter(input string, format string) string {
 		}
 
 		switch char {
-		case "~":
+		case "\\":
 			escape = true
 		case "*":
 			final += input
@@ -291,11 +303,52 @@ func ClearCache() {
 
 func CheckCache(path string) (bool, error) {
 	// check if file is the same as the cache
-	return true, nil
+
+	cache_hash := sha256.Sum256([]byte(path))
+	cache_name := hex.EncodeToString(cache_hash[:])
+	cache_full := filepath.Join("./.makeup/cache", cache_name)
+
+	_, err := os.Stat(cache_full)
+
+	if os.IsNotExist(err) {
+		return true, nil
+	} else if err != nil {
+		return false, err
+	}
+
+	cache_content, err := os.ReadFile(cache_full)
+	if err != nil {
+		return false, err
+	}
+
+	file_content, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+
+	file_hash := sha256.Sum256(file_content)
+	result := slices.Compare(cache_content, []byte(file_hash[:]))
+	if result == 0 {
+		return true, nil
+	}
+	return false, nil
 }
 
 func CacheFile(path string) error {
 	// create file in .makeup/cache that corresponds to the file to check
+	cache_hash := sha256.Sum256([]byte(path))
+	cache_name := hex.EncodeToString(cache_hash[:])
+	cache_full := filepath.Join("./.makeup/cache", cache_name)
+
+	file_content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	encrypted_content := sha256.Sum256(file_content)
+	encrypted_content_string := hex.EncodeToString(encrypted_content[:])
+
+	os.WriteFile(cache_full, []byte(encrypted_content_string), 0644)
 	return nil
 }
 
@@ -320,38 +373,33 @@ func ExecuteProfile(profile_name string, public bool) {
 	for _, command := range commands {
 		fmt.Println(command.command)
 		fmt.Println(command.args)
-	}
+		/*
+			cmd := exec.Command(command.command, command.args[1:]...)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
 
-	/*
-		// for loop to execute, see all exit codes and see if they are all valid
-		cmd := exec.Command(command, args...)
-		var output_buffer bytes.Buffer
-		cmd.Stdout = &output_buffer
-		cmd.Stderr = &output_buffer
-
-		err = cmd.Run()
-		if err != nil {
-			exitError, ok := err.(*exec.ExitError)
-			if !ok {
-				log.Fatal("Something went wrong")
-			}
-			if exitError.ExitCode() != int(profile.Condition) {
+			err = cmd.Run()
+			if err != nil {
+				exitError, ok := err.(*exec.ExitError)
+				if !ok {
+					log.Fatal("Something went wrong")
+				}
+				if exitError.ExitCode() != profile.Condition {
+					log.Fatalf("Condition not met on \"%s\"", profile.Name)
+				}
+			} else if profile.Condition != 0 {
 				log.Fatalf("Condition not met on \"%s\"", profile.Name)
 			}
-		} else if profile.Condition != 0 {
-			log.Fatalf("Condition not met on \"%s\"", profile.Name)
-		}
+		*/
+	}
 
-		if profile.NextProfile == "" {
-			os.Exit(0)
-		}
-
-		ExecuteProfile(profile.NextProfile, false)
-		// parse command and execute then call the recursive execute private profile function until done or error code that is not in the condition
-	*/
+	if profile.NextProfile == "" {
+		os.Exit(0)
+	}
+	ExecuteProfile(profile.NextProfile, false)
 }
 
-func Help() {
+func Help(subject string) {
 
 }
 
@@ -371,6 +419,7 @@ func main() {
 		if len(args) == 3 {
 			subject = args[2]
 		}
+		Help(subject)
 		fmt.Println(subject)
 		// makeup help command with subject
 	case "new":
@@ -380,15 +429,29 @@ func main() {
 		}
 		InitializeMakeup(preset)
 	case "clear": // clear cache folder
+		exists, err := CheckMakeup()
+		if err != nil {
+			log.Fatal(err)
+		} else if !exists {
+			fmt.Println("Makeup is not initialized here. Type 'makeup new <preset>' to initialize makeup")
+			os.Exit(0)
+		}
 		ClearCache()
 	case "exec":
-		if len(args) < 3 {
+		exists, err := CheckMakeup()
+		if err != nil {
+			log.Fatal(err)
+		} else if !exists {
+			fmt.Println("Makeup is not initialized here. Type 'makeup new <preset>' to initialize makeup")
+			os.Exit(0)
+		} else if len(args) < 3 {
 			fmt.Println("Type 'makeup exec <profile name>' to execute a profile")
 			os.Exit(0)
 		}
 		ExecuteProfile(args[2], true)
 		// execute a profile in the public profiles
 	default:
+		Help("none")
 		// makeup help
 
 	}
