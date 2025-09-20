@@ -61,7 +61,6 @@ type WildCardMapRuleSet struct {
 	WildCardRegex     string `json:"wildcard-regex"`
 	WildCardFormat    string `json:"wildcard-format"`
 	Cache             bool   `json:"cache"`
-	MapDirectory      string `json:"map-dir"`
 	MapFormat         string `json:"map-format"`
 	// this should be able to get a list of files from a directory and be able to use the compiler to map the .o files
 }
