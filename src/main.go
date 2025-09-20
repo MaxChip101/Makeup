@@ -1,19 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"slices"
-	"strconv"
+	"regexp"
 	"strings"
 )
 
 const VERSION string = "0.0.1"
 
+// Json Structure
 type Project struct {
 	Version     string `json:"version"`
 	Name        string `json:"name"`
@@ -21,610 +22,329 @@ type Project struct {
 	License     string `json:"license"`
 }
 
-type Language struct {
-	Name                  string   `json:"name"`
-	Windows_Compiler      string   `json:"windows_compiler"`
-	Linux_Compiler        string   `json:"linux_compiler"`
-	Mac_Compiler          string   `json:"mac_compiler"`
-	Windows_Linker        string   `json:"windows_linker"`
-	Linux_Linker          string   `json:"linux_linker"`
-	Mac_Linker            string   `json:"mac_linker"`
-	Generate_Object_Files bool     `json:"generate_object_files"`
-	File_Extensions       []string `json:"file_extensions"`
-	Default_Compile_Flags []string `json:"default_compile_flags"`
-	Default_Link_Flags    []string `json:"default_link_flags"`
-	Library_Prefix        string   `json:"library_prefix"`
-	Compile_Prefix        string   `json:"compile_prefix"`
-	Link_Template         string   `json:"link_template"`
-	Compile_Template      string   `json:"compile_template"`
-}
-
-type Paths struct {
-	Source   []string `json:"source"`
-	Artifact string   `json:"artifact"`
-	Exclude  []string `json:"exclude"`
-}
-
-type Cache struct {
-	Enabled     bool     `json:"enabled"`
-	Directories []string `json:"directories"`
-}
-
-type Build struct {
-	Windows     bool     `json:"windows"`
-	Linux       bool     `json:"linux"`
-	Mac         bool     `json:"mac"`
-	Target_Name string   `json:"target_name"`
-	Libraries   []string `json:"libraries"`
-}
-
-type Platform struct {
-	Compile_Flags []string `json:"compile_flags"`
-	Link_Flags    []string `json:"link_flags"`
-}
-
 type Profile struct {
-	Windows Platform `json:"windows"`
-	Linux   Platform `json:"linux"`
-	Mac     Platform `json:"mac"`
+	Name        string          `json:"name"`
+	Type        string          `json:"type"`
+	RuleSet     json.RawMessage `json:"rule-set"`
+	Template    string          `json:"template"`
+	NextProfile string          `json:"next-profile"`
+	Condition   int8            `json:"condition"`
 }
 
 type Profiles struct {
-	Release Profile `json:"release"`
-	Debug   Profile `json:"debug"`
+	Public  []Profile `json:"public"`
+	Private []Profile `json:"private"`
 }
 
-type Hooks struct {
-	Pre_Build  []string `json:"pre_build"`
-	Post_Build []string `json:"post_build"`
+type Build struct {
+	Profiles Profiles `json:"profiles"`
 }
 
 type Makeup struct {
-	Version string `json:"version"`
+	Version        string `json:"version"`
+	DefaultProfile string `json:"default-profile"`
 }
 
-type Configs struct {
-	Project  Project  `json:"project"`
-	Language Language `json:"language"`
-	Paths    Paths    `json:"paths"`
-	Cache    Cache    `json:"cache"`
-	Build    Build    `json:"build"`
-	Profiles Profiles `json:"profiles"`
-	Hooks    Hooks    `json:"hooks"`
-	Makeup   Makeup   `json:"makeup"`
+type Configurations struct {
+	Project Project `json:"project"`
+	Build   Build   `json:"build"`
+	Makeup  Makeup  `json:"makeup"`
 }
 
-func makeup_exists() (exists bool) {
-	_, err := os.Stat(".makeup")
-	if err == nil {
-		return true
-	}
-
-	fmt.Println("Makeup does not exist in this directory, type 'makeup new' to create a makeup configuration")
-	return false
+// Profile Rule Sets
+type WildCardRuleSet struct {
+	Directory string `json:"directory"`
+	Regex     string `json:"regex"`
+	Format    string `json:"format"`
+	Cache     bool   `json:"cache"`
 }
 
-func check_makeup(print_error bool) (all_good bool) {
-	cache_good := false
-	config_good := false
-
-	_, err2 := os.Stat(".makeup/cache")
-	if err2 == nil {
-		cache_good = true
-	}
-
-	_, err3 := os.Stat(".makeup/config.json")
-	if err3 == nil {
-		config_good = true
-	}
-
-	if cache_good && config_good {
-		return true
-	}
-
-	if print_error {
-		fmt.Println("There is an issue in the Makeup directory, type 'makeup fix' to hopefully fix the issue")
-	}
-
-	return false
+type WildCardMapRuleSet struct {
+	WildCardDirectory string `json:"wildcard-directory"`
+	WildCardRegex     string `json:"wildcard-regex"`
+	WildCardFormat    string `json:"wildcard-format"`
+	Cache             bool   `json:"cache"`
+	MapDirectory      string `json:"map-dir"`
+	MapFormat         string `json:"map-format"`
+	// this should be able to get a list of files from a directory and be able to use the compiler to map the .o files
 }
 
-func check_version() (up_to_date bool) {
-	data := read_json(".makeup/config.json")
-	makeup_version := data.Makeup.Version
+func WriteConfigFile(configs Configurations) error {
+	data, err := json.MarshalIndent(configs, "", "\t")
+	if err != nil {
+		return err
+	}
+	os.WriteFile("./.makeup/config.json", data, 0644)
+	return err
+}
 
-	this_version := strings.Split(VERSION, ".")
-	project_version := strings.Split(makeup_version, ".")
+func ReadConfigFile(configs *Configurations) error {
+	data, err := os.ReadFile("./.makeup/config.json")
+	if err != nil {
+		return err
+	}
 
-	up_to_date = false
+	json.Unmarshal(data, configs)
+	return nil
+}
 
-	for i := range 3 {
-		project_ver_num, err := strconv.Atoi(project_version[i])
+func CheckMakeup() (bool, error) {
+	_, err := os.Stat("./.makeup")
+	if os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func InitializeMakeup(preset string) {
+	exists, err := CheckMakeup()
+	if err != nil {
+		log.Fatal(err)
+	} else if exists {
+		fmt.Println("Makeup already exists here")
+	}
+
+	err = os.MkdirAll("./.makeup/cache", 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = os.Create("./.makeup/config.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var configs Configurations
+	err = WriteConfigFile(configs)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func GetProfile(name string, public bool) (Profile, error) {
+	var config Configurations
+	err := ReadConfigFile(&config)
+	if err != nil {
+		return Profile{}, err
+	}
+
+	if public {
+		for _, profile := range config.Build.Profiles.Public {
+			if profile.Name == name {
+				return profile, nil
+			}
+		}
+	} else {
+		for _, profile := range config.Build.Profiles.Private {
+			if profile.Name == name {
+				return profile, nil
+			}
+		}
+	}
+
+	return Profile{}, errors.New(fmt.Sprintf("Profile \"%s\" does not exist", name))
+}
+
+func CreateProfileCommand(profile Profile) (string, []string, error) {
+	// looks at ruleset and template
+
+	var command string
+	var args []string
+
+	// when wildcard shown and the type is a wildcard, then search for the files
+
+	pattern := strings.Split(profile.Template, " ")
+
+	args = append(args, pattern[0])
+
+	pattern[0] = ""
+
+	var wildcard_files []string
+
+	for _, arg := range pattern {
+		switch arg {
+		case "{wildcard}":
+			// do  stuff
+		case "{target}":
+
+		case "{map}":
+			args = append(args)
+		default:
+			args = append(args, arg)
+		}
+	}
+
+	switch profile.Type {
+	case "wildcard":
+		var rule WildCardRuleSet
+		err := json.Unmarshal(profile.RuleSet, &rule)
 		if err != nil {
-			log.Fatal(err)
+			return "", nil, err
 		}
-		this_ver_num, err := strconv.Atoi(this_version[i])
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		if project_ver_num >= this_ver_num {
-			up_to_date = true
-		}
+		// more cases for more ruleset types
 	}
 
-	if up_to_date {
-		return true
-	}
-
-	return false
+	return "", nil, nil
 }
 
-func read_json(path string) (content Configs) {
-	var data Configs
-
-	readContent, err := os.ReadFile(path)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = json.Unmarshal(readContent, &data)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return data
-}
-
-func write_json(path string, data Configs) {
-	content, err := json.MarshalIndent(data, "", "	")
-	if err != nil {
-		log.Fatal(err)
-	}
-	os.WriteFile(path, content, 0644)
-}
-
-func makeup_fix() {
-	if !makeup_exists() {
-		return
-	}
-	if check_makeup(false) {
-		fmt.Println("Makeup is all good")
-		return
-	}
-
-	_, err1 := os.Stat(".makeup/cache")
-	if err1 != nil {
-		os.Create(".makeup/cache")
-	}
-	_, err2 := os.Stat(".makeup/config.json")
-	if err2 != nil {
-		os.Create(".makeup/config.json")
-	}
-}
-
-func clear_cache() {
-	if !makeup_exists() || !check_makeup(true) {
-		return
-	}
-
-	os.WriteFile(".makeup/cache", []byte{0}, 0644)
-}
-
-func makeup_remove(y_flag_enabled bool) {
-	if !makeup_exists() {
-		return
-	}
-
-	var response string
-
-	if !y_flag_enabled {
-		fmt.Print("Are you sure? [Y/n] ")
-		fmt.Scanf("%s", &response)
-		if strings.ToLower(response) != "y" {
-			return
-		}
-	}
-
-	err := os.RemoveAll(".makeup")
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-func recursive_file_thing(directory string, data Configs) (files []string) {
-
+func GetFiles(directory string, pattern string, format string) ([]string, error) {
 	entries, err := os.ReadDir(directory)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
+
+	regex, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	var files []string
+
 	for _, entry := range entries {
-		if !slices.Contains(data.Paths.Exclude, entry.Name()) && slices.Contains(data.Language.File_Extensions, entry.Name()) {
-			if entry.IsDir() {
-				files = append(files, recursive_file_thing(directory+"/"+entry.Name(), data)...)
-			} else {
-				files = append(files, directory+"/"+entry.Name())
-			}
+		if regex.MatchString(entry.Name()) {
+			files = append(files, Formatter(entry.Name(), format))
 		}
 	}
-	return files
+
+	return files, nil
 }
 
-func initialize_directories(data Configs) {
-	os.Mkdir(data.Paths.Artifact, 0755)
-	if data.Build.Windows {
-		os.MkdirAll(filepath.Join(data.Paths.Artifact, "win", "debug"), 0755)
-		os.Mkdir(filepath.Join(data.Paths.Artifact, "win", "release"), 0755)
-		if data.Language.Generate_Object_Files {
-			os.Mkdir(filepath.Join(data.Paths.Artifact, "win", "release", "objects"), 0755)
-			os.Mkdir(filepath.Join(data.Paths.Artifact, "win", "debug", "objects"), 0755)
-		}
-	}
-	if data.Build.Linux {
-		os.MkdirAll(data.Paths.Artifact+"/lin/debug", 0755)
-		os.Mkdir(data.Paths.Artifact+"/lin/release", 0755)
-		if data.Language.Generate_Object_Files {
-			os.Mkdir(data.Paths.Artifact+"/lin/release/objects", 0755)
-			os.Mkdir(data.Paths.Artifact+"/lin/debug/objects", 0755)
-		}
-	}
-	if data.Build.Mac {
-		os.MkdirAll(data.Paths.Artifact+"/mac/debug", 0755)
-		os.Mkdir(data.Paths.Artifact+"/mac/release", 0755)
-		if data.Language.Generate_Object_Files {
-			os.Mkdir(data.Paths.Artifact+"/mac/release/objects", 0755)
-			os.Mkdir(data.Paths.Artifact+"/mac/debug/objects", 0755)
-		}
-	}
-}
+func Formatter(input string, format string) string {
+	// * is the input text
+	// - subtracts 1 character from the end
+	// \* is a regular *
+	// \- is a regular -
 
-func linux_build(release bool, data Configs, input_files []string) {
-	var args []string
-	var target string
-	var object_directory string
-	if release {
-		if data.Language.Generate_Object_Files {
-			object_directory = data.Paths.Artifact + "/lin/release/objects"
-		}
-		target = data.Paths.Artifact + "/lin/release/" + data.Build.Target_Name
-	} else {
-		if data.Language.Generate_Object_Files {
-			object_directory = data.Paths.Artifact + "/lin/debug/objects/"
-		}
-		target = data.Paths.Artifact + "/lin/debug/" + data.Build.Target_Name
-	}
+	var final string
 
-	compile_template := strings.Split(data.Language.Compile_Template, " ")
+	format_slice := strings.Split(format, "")
+	escape := false
 
-	var libraries []string
-
-	for _, library := range data.Build.Libraries {
-		libraries = append(libraries, data.Language.Library_Prefix+library)
-	}
-
-	fmt.Println(object_directory + "object.o")
-
-	if data.Language.Generate_Object_Files {
-
-		for i := 0; i < len(input_files); i++ {
-			args = nil
-			for _, arg := range compile_template {
-				switch arg {
-				case "{input_files}":
-					args = append(args, input_files[i])
-				case "{flags}":
-					args = append(args, data.Language.Default_Compile_Flags...)
-					args = append(args, data.Language.Compile_Prefix)
-					if release {
-						args = append(args, data.Profiles.Release.Linux.Compile_Flags...)
-					} else {
-						args = append(args, data.Profiles.Debug.Linux.Compile_Flags...)
-					}
-				case "{target}":
-					args = append(args, object_directory+"object.o")
-
-				default:
-					if arg != "{compiler}" {
-						args = append(args, arg)
-					}
-				}
-			}
-
-			fmt.Println(args)
-			cmd := exec.Command(data.Language.Linux_Compiler, args...)
-			output, err := cmd.CombinedOutput()
-
-			if err != nil {
-				fmt.Println(string(output))
-				log.Fatal(err)
-			}
-
-			fmt.Println(string(output))
+	for _, char := range format_slice {
+		if escape {
+			final += char
+			escape = false
+			continue
 		}
 
-		fmt.Println(args)
-
-		args = nil
-
-		entry, err := os.ReadDir(object_directory)
-
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		var objects []string
-
-		for _, obj := range entry {
-			objects = append(objects, object_directory+"/"+obj.Name())
-		}
-
-		link_template := strings.Split(data.Language.Link_Template, " ")
-
-		for _, arg := range link_template {
-			switch arg {
-			case "{objects}":
-				args = append(args, objects...)
-			case "{flags}":
-				args = append(args, data.Language.Default_Link_Flags...)
-				if release {
-					args = append(args, data.Profiles.Release.Linux.Link_Flags...)
-				} else {
-					args = append(args, data.Profiles.Debug.Linux.Link_Flags...)
-				}
-			case "{target}":
-				args = append(args, target)
-			case "{libraries}":
-				args = append(args, libraries...)
-			default:
-				if arg != "{linker}" {
-					args = append(args, arg)
-				}
-			}
-		}
-
-		cmd := exec.Command(data.Language.Linux_Linker, args...)
-		output, err := cmd.CombinedOutput()
-
-		if err != nil {
-			fmt.Println(string(output))
-			log.Fatal(err)
-		}
-
-		fmt.Println(string(output))
-
-	} else {
-		for _, arg := range compile_template {
-			switch arg {
-			case "{input_files}":
-				args = append(args, input_files...)
-			case "{flags}":
-				args = append(args, data.Language.Default_Compile_Flags...)
-				if release {
-					args = append(args, data.Profiles.Release.Linux.Compile_Flags...)
-				} else {
-					args = append(args, data.Profiles.Debug.Linux.Compile_Flags...)
-				}
-			case "{target}":
-				args = append(args, target)
-			default:
-				if arg != "{compiler}" {
-					args = append(args, arg)
-				}
-			}
-		}
-		cmd := exec.Command(data.Language.Linux_Compiler, args...)
-		output, err := cmd.CombinedOutput()
-
-		if err != nil {
-			fmt.Println(string(output))
-			log.Fatal(err)
-		}
-
-		fmt.Println(string(output))
-	}
-
-}
-
-func windows_build(release bool, data Configs, input_files []string) {
-	var args []string
-	var target string
-	var object_directory string
-	if release {
-		if data.Language.Generate_Object_Files {
-			object_directory = data.Paths.Artifact + "/lin/release/objects/"
-		}
-		target = data.Paths.Artifact + "/lin/release/" + data.Build.Target_Name
-	} else {
-		if data.Language.Generate_Object_Files {
-			object_directory = data.Paths.Artifact + "/lin/debug/objects/"
-		}
-		target = data.Paths.Artifact + "/lin/debug/" + data.Build.Target_Name
-	}
-
-	fmt.Println(object_directory)
-
-	compile_template := strings.Split(data.Language.Compile_Template, " ")
-
-	var libraries []string
-
-	for _, library := range data.Build.Libraries {
-		libraries = append(libraries, data.Language.Library_Prefix+library)
-	}
-
-	for _, arg := range compile_template {
-		switch arg {
-		case "{input_files}":
-			args = append(args, input_files...)
-		case "{flags}":
-			args = append(args, data.Language.Default_Compile_Flags...)
-			if release {
-				args = append(args, data.Profiles.Release.Linux.Compile_Flags...)
-			} else {
-				args = append(args, data.Profiles.Debug.Linux.Compile_Flags...)
-			}
-		case "{target}":
-			args = append(args, target)
+		switch char {
+		case "\\":
+			escape = true
+		case "*":
+			final += input
+		case "-":
+			modified := final[:len(final)-1]
+			final = modified
 		default:
-			args = append(args, arg)
+			final += char
 		}
 	}
-	cmd := exec.Command(data.Language.Linux_Compiler, args...)
 
-	output, err := cmd.CombinedOutput()
+	return final
+}
+
+func ClearCache() {
+	err := os.RemoveAll("./.makeup/cache")
+	if err != nil {
+		log.Fatal(err)
+	}
+	os.Mkdir("./.makeup/cache", 0755)
+}
+
+func CheckCache(path string) (bool, error) {
+	// check if file is the same as the cache
+	return true, nil
+}
+
+func CacheFile(path string) error {
+	// create file in .makeup/cache that corresponds to the file to check
+	return nil
+}
+
+func ExecuteProfile(profile_name string, public bool) {
+	var profile Profile
+	var err error
+	if public {
+		profile, err = GetProfile(profile_name, true)
+	} else {
+		profile, err = GetProfile(profile_name, false)
+	}
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println(string(output))
-}
-
-func mac_build(release bool, data Configs, input_files []string) {
-	var args []string
-	var target string
-	var object_directory string
-	if release {
-		if data.Language.Generate_Object_Files {
-			object_directory = data.Paths.Artifact + "/lin/release/objects/"
-		}
-		target = data.Paths.Artifact + "/lin/release/" + data.Build.Target_Name
-	} else {
-		if data.Language.Generate_Object_Files {
-			object_directory = data.Paths.Artifact + "/lin/debug/objects/"
-		}
-		target = data.Paths.Artifact + "/lin/debug/" + data.Build.Target_Name
-	}
-
-	fmt.Println(object_directory)
-
-	compile_template := strings.Split(data.Language.Compile_Template, " ")
-
-	var libraries []string
-
-	for _, library := range data.Build.Libraries {
-		libraries = append(libraries, data.Language.Library_Prefix+library)
-	}
-
-	for _, arg := range compile_template {
-		switch arg {
-		case "{input_files}":
-			args = append(args, input_files...)
-		case "{flags}":
-			args = append(args, data.Language.Default_Compile_Flags...)
-			if release {
-				args = append(args, data.Profiles.Release.Linux.Compile_Flags...)
-			} else {
-				args = append(args, data.Profiles.Debug.Linux.Compile_Flags...)
-			}
-		case "{target}":
-			args = append(args, target)
-		default:
-			args = append(args, arg)
-		}
-	}
-	cmd := exec.Command(data.Language.Linux_Compiler, args...)
-
-	output, err := cmd.CombinedOutput()
-
+	command, args, err := CreateProfileCommand(profile)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println(string(output))
-}
+	cmd := exec.Command(command, args...)
+	var output_buffer bytes.Buffer
+	cmd.Stdout = &output_buffer
+	cmd.Stderr = &output_buffer
 
-func makeup_build(platform string, release bool) {
-	if !makeup_exists() || !check_makeup(true) {
-		return
-	}
-
-	data := read_json(".makeup/config.json")
-
-	var source []string
-
-	for _, dir := range data.Paths.Source {
-		source = append(source, recursive_file_thing(dir, data)...)
-	}
-
-	initialize_directories(data)
-
-	switch platform {
-	case "windows":
-		windows_build(release, data, source)
-	case "linux":
-		linux_build(release, data, source)
-	case "mac":
-		mac_build(release, data, source)
-	}
-
-}
-
-func makeup_clean() {
-	if !makeup_exists() || !check_makeup(true) {
-		return
-	}
-
-}
-
-func makeup_help() {
-	fmt.Println("I see you need help")
-}
-
-func makeup_new(name string) {
-	err := os.Mkdir(".makeup", 0755)
+	err = cmd.Run()
 	if err != nil {
-		fmt.Println("Makeup is already initialized here")
-		return
+		exitError, ok := err.(*exec.ExitError)
+		if !ok {
+			log.Fatal("Something went wrong")
+		}
+		if exitError.ExitCode() != int(profile.Condition) {
+			log.Fatalf("Condition not met on \"%s\"", profile.Name)
+		}
+	} else if profile.Condition != 0 {
+		log.Fatalf("Condition not met on \"%s\"", profile.Name)
 	}
 
-	os.Create(".makeup/cache")
-	os.Create(".makeup/config.json")
+	if profile.NextProfile == "" {
+		os.Exit(0)
+	}
 
-	data := Configs{}
+	ExecuteProfile(profile.NextProfile, false)
+	// parse command and execute then call the recursive execute private profile function until done or error code that is not in the condition
+}
 
-	write_json(".makeup/config.json", data)
+func Help() {
+
 }
 
 func main() {
 	args := os.Args
 
+	// "makeup"
 	if len(args) < 2 {
 		fmt.Println("Type 'makeup help' for a list of commands")
 		return
 	}
 
-	if args[1] == "help" || args[1] == "--help" || args[1] == "-h" {
-		makeup_help()
-		return
-	} else if args[1] == "new" {
-		if len(args) < 3 {
-			cwd, err := os.Getwd()
-			if err != nil {
-				log.Fatal(err)
-			}
-			makeup_new(filepath.Base(cwd))
-			return
+	// "makeup <argument>"
+	switch args[1] {
+	case "help":
+		subject := "none"
+		if len(args) == 3 {
+			subject = args[2]
 		}
-		makeup_new(args[2])
-		return
-	} else if args[1] == "fix" {
-		makeup_fix()
-		return
-	} else if args[1] == "clear" {
-		clear_cache()
-		return
-	} else if args[1] == "remove" {
-		if len(args) == 3 && args[2] == "-y" {
-			makeup_remove(true)
-			return
+		fmt.Println(subject)
+		// makeup help command with subject
+	case "new":
+		preset := "default"
+		if len(args) == 3 {
+			preset = args[2]
 		}
-		makeup_remove(false)
-		return
-	} else if args[1] == "build" {
-		if len(args) == 3 && (args[2] == "--release" || args[2] == "-r") {
-			makeup_build("linux", true)
-			return
+		InitializeMakeup(preset)
+	case "clear": // clear cache folder
+		ClearCache()
+	case "exec":
+		if len(args) != 4 {
+			fmt.Println("Type 'makeup exec <profile name>' to execute a profile")
+			os.Exit(0)
 		}
-		makeup_build("linux", false)
-		return
+		ExecuteProfile(args[3], true)
+		// execute a profile in the public profiles
+	default:
+		// makeup help
+
 	}
 }

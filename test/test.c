@@ -1,6 +1,6 @@
 #include <stdio.h>
 
 int main() {
-  printf("hedfsdf");
+  printf("hedfsdf\n");
   return 0;
 }

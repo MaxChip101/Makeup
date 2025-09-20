@@ -1,0 +1,75 @@
+{
+    "project": {
+        "version": "0.0.1",
+        "name": "Makeup",
+        "description": "A comprehensive build system written in Go",
+        "license": "MIT"
+    },
+    "build": {
+        "target": "bin/name",
+        "profiles": {
+            "public": [
+                {
+                    "name": "linux_build",
+                    "type": "wildcard",
+                    "rule-set": {
+                        "directory": "",
+                        "regex": ".*\.c",
+                        "prefix": "",
+                        "suffix": "",
+                        "cache": true
+                    },
+                    "template": "gcc {wildcard} -o {target}",
+                    "next_profile": "",
+                    "condition": 0
+                },
+                {
+                    "name": "test",
+                    "type": "wildcard+map",
+                    "rule-set": {
+                        "wildcard-dir": "",
+                        "wildcard-regex": ".*\.c",
+                        "wildcard-format": "prefix*suffix",
+                        "cache-wildcard": true,
+                        "map-dir": "",
+                        "map-format": "prefix*-o"
+                    },
+                    "template": [
+                        "gcc"
+                    ],
+                    "template": "gcc {wildcard} -o {map}",
+                    "next_profile": "",
+                    "condition": 0
+                },
+                {
+                    "name": "linux_debug",
+                    "type": "wildcard",
+                    "rule-set": {
+                        "directory": "",
+                        "regex": "",
+                        "prefix": "",
+                        "suffix": "",
+                        "cache": true
+                    },
+                    "template": "gcc {wildcard} -o {target}",
+                    "next_profile": null,
+                    "condition": 0
+                }
+            ],
+            "private": [
+                {
+                    "name": "find_stuff",
+                    "type": "none",
+                    "rule-set": {},
+                    "template": "ls someshi",
+                    "next_profile": null,
+                    "condition": 0
+                }
+            ]
+        }
+    },
+    "makeup": {
+        "version": "0.0.1",
+        "default_profile": "linux"
+    }
+}
