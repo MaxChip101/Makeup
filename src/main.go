@@ -1,13 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"regexp"
 	"strings"
 )
@@ -28,7 +25,7 @@ type Profile struct {
 	RuleSet     json.RawMessage `json:"rule-set"`
 	Template    string          `json:"template"`
 	NextProfile string          `json:"next-profile"`
-	Condition   int8            `json:"condition"`
+	Conditions  []int8          `json:"conditions"`
 }
 
 type Profiles struct {
@@ -60,13 +57,19 @@ type WildCardRuleSet struct {
 }
 
 type WildCardMapRuleSet struct {
-	WildCardDirectory string `json:"wildcard-directory"`
+	WildCardDirectory string `json:"wildcard-dir"`
 	WildCardRegex     string `json:"wildcard-regex"`
 	WildCardFormat    string `json:"wildcard-format"`
 	Cache             bool   `json:"cache"`
 	MapDirectory      string `json:"map-dir"`
 	MapFormat         string `json:"map-format"`
 	// this should be able to get a list of files from a directory and be able to use the compiler to map the .o files
+}
+
+// Other Structs
+type Command struct {
+	command string
+	args    []string
 }
 
 func WriteConfigFile(configs Configurations) error {
@@ -143,49 +146,75 @@ func GetProfile(name string, public bool) (Profile, error) {
 		}
 	}
 
-	return Profile{}, errors.New(fmt.Sprintf("Profile \"%s\" does not exist", name))
+	return Profile{}, fmt.Errorf("Profile \"%s\" does not exist", name)
 }
 
-func CreateProfileCommand(profile Profile) (string, []string, error) {
-	// looks at ruleset and template
-
-	var command string
-	var args []string
-
-	// when wildcard shown and the type is a wildcard, then search for the files
-
+func CreateProfileCommand(profile Profile) ([]Command, error) {
+	var commands []Command
 	pattern := strings.Split(profile.Template, " ")
-
-	args = append(args, pattern[0])
-
-	pattern[0] = ""
-
-	var wildcard_files []string
-
-	for _, arg := range pattern {
-		switch arg {
-		case "{wildcard}":
-			// do  stuff
-		case "{target}":
-
-		case "{map}":
-			args = append(args)
-		default:
-			args = append(args, arg)
-		}
-	}
-
 	switch profile.Type {
 	case "wildcard":
 		var rule WildCardRuleSet
 		err := json.Unmarshal(profile.RuleSet, &rule)
 		if err != nil {
-			return "", nil, err
+			return nil, err
 		}
-		// more cases for more ruleset types
+		files, err := GetFiles(rule.Directory, rule.Regex, rule.Format)
+		if err != nil {
+			return nil, err
+		}
+		command := Command{command: pattern[0]}
+		pattern[0] = ""
+		for _, arg := range pattern {
+			switch arg {
+			case "{wildcard}":
+				command.args = append(command.args, files...)
+			default:
+				command.args = append(command.args, arg)
+			} // there might be more variables for template syntax
+		}
+		commands = append(commands, command)
+	case "wildcard+map":
+		var rule WildCardMapRuleSet
+		err := json.Unmarshal(profile.RuleSet, &rule)
+		if err != nil {
+			return nil, err
+		}
+		wildcard_files, err := GetFiles(rule.WildCardDirectory, rule.WildCardRegex, rule.WildCardFormat)
+		if err != nil {
+			return nil, err
+		}
+		mapped_files, err := GetFiles(rule.WildCardDirectory, rule.WildCardRegex, rule.MapFormat)
+		if err != nil {
+			return nil, err
+		}
+		commands = make([]Command, len(wildcard_files))
+		for _, command := range commands {
+			command.command = pattern[0]
+		}
+		pattern[0] = ""
+
+		for index, command := range commands {
+			for _, arg := range pattern {
+				switch arg {
+				case "{wildcard}":
+					command.args = append(command.args, wildcard_files[index])
+				case "{map}":
+					command.args = append(command.args, mapped_files[index])
+				default:
+					command.args = append(command.args, arg)
+				} // there might be more variables for template syntax
+			}
+		}
+
+	default:
+		command := Command{command: pattern[0]}
+		pattern[0] = ""
+		command.args = append(command.args, pattern...)
+		commands = append(commands, command)
 	}
 
-	return "", nil, nil
+	return commands, nil
 }
 
 func GetFiles(directory string, pattern string, format string) ([]string, error) {
@@ -210,17 +239,26 @@ func GetFiles(directory string, pattern string, format string) ([]string, error)
 	return files, nil
 }
 
+func FormatAll(inputs []string, format string) []string {
+	var final []string
+	for _, input := range inputs {
+		final = append(final, Formatter(input, format))
+	}
+	return final
+}
+
 func Formatter(input string, format string) string {
 	// * is the input text
 	// - subtracts 1 character from the end
-	// \* is a regular *
-	// \- is a regular -
+	// ~* is a regular *
+	// ~- is a regular -
+	// ~~ is a regular ~
+	// i had to change \ to ~ bc of json syntax problems 😑
 
 	var final string
 
 	format_slice := strings.Split(format, "")
 	escape := false
-
 	for _, char := range format_slice {
 		if escape {
 			final += char
@@ -229,7 +267,7 @@ func Formatter(input string, format string) string {
 		}
 
 		switch char {
-		case "\\":
+		case "~":
 			escape = true
 		case "*":
 			final += input
@@ -275,35 +313,43 @@ func ExecuteProfile(profile_name string, public bool) {
 		log.Fatal(err)
 	}
 
-	command, args, err := CreateProfileCommand(profile)
+	commands, err := CreateProfileCommand(profile)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	cmd := exec.Command(command, args...)
-	var output_buffer bytes.Buffer
-	cmd.Stdout = &output_buffer
-	cmd.Stderr = &output_buffer
+	for _, command := range commands {
+		fmt.Println(command.command)
+		fmt.Println(command.args)
+	}
 
-	err = cmd.Run()
-	if err != nil {
-		exitError, ok := err.(*exec.ExitError)
-		if !ok {
-			log.Fatal("Something went wrong")
-		}
-		if exitError.ExitCode() != int(profile.Condition) {
+	/*
+		// for loop to execute, see all exit codes and see if they are all valid
+		cmd := exec.Command(command, args...)
+		var output_buffer bytes.Buffer
+		cmd.Stdout = &output_buffer
+		cmd.Stderr = &output_buffer
+
+		err = cmd.Run()
+		if err != nil {
+			exitError, ok := err.(*exec.ExitError)
+			if !ok {
+				log.Fatal("Something went wrong")
+			}
+			if exitError.ExitCode() != int(profile.Condition) {
+				log.Fatalf("Condition not met on \"%s\"", profile.Name)
+			}
+		} else if profile.Condition != 0 {
 			log.Fatalf("Condition not met on \"%s\"", profile.Name)
 		}
-	} else if profile.Condition != 0 {
-		log.Fatalf("Condition not met on \"%s\"", profile.Name)
-	}
 
-	if profile.NextProfile == "" {
-		os.Exit(0)
-	}
+		if profile.NextProfile == "" {
+			os.Exit(0)
+		}
 
-	ExecuteProfile(profile.NextProfile, false)
-	// parse command and execute then call the recursive execute private profile function until done or error code that is not in the condition
+		ExecuteProfile(profile.NextProfile, false)
+		// parse command and execute then call the recursive execute private profile function until done or error code that is not in the condition
+	*/
 }
 
 func Help() {
@@ -337,11 +383,11 @@ func main() {
 	case "clear": // clear cache folder
 		ClearCache()
 	case "exec":
-		if len(args) != 4 {
+		if len(args) < 3 {
 			fmt.Println("Type 'makeup exec <profile name>' to execute a profile")
 			os.Exit(0)
 		}
-		ExecuteProfile(args[3], true)
+		ExecuteProfile(args[2], true)
 		// execute a profile in the public profiles
 	default:
 		// makeup help

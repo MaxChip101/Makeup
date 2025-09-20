@@ -34,9 +34,6 @@
                         "map-dir": "",
                         "map-format": "prefix*-o"
                     },
-                    "template": [
-                        "gcc"
-                    ],
                     "template": "gcc {wildcard} -o {map}",
                     "next_profile": "",
                     "condition": 0
