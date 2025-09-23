@@ -1,15 +1,13 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 )
 
@@ -42,14 +40,19 @@ type Build struct {
 }
 
 type Makeup struct {
-	Version        string `json:"version"`
-	DefaultProfile string `json:"default-profile"`
+	Version string `json:"version"`
 }
 
 type Configurations struct {
 	Project Project `json:"project"`
 	Build   Build   `json:"build"`
 	Makeup  Makeup  `json:"makeup"`
+}
+
+// preset structs
+type Preset struct {
+	Profiles Profiles `json:"profiles"`
+	Makeup   Makeup   `json:"makeup"`
 }
 
 // Profile Rule Sets
@@ -80,12 +83,12 @@ func WriteConfigFile(configs Configurations) error {
 	if err != nil {
 		return err
 	}
-	os.WriteFile("./.makeup/config.json", data, 0644)
+	os.WriteFile(filepath.Join(".makeup", "config.json"), data, 0644)
 	return err
 }
 
 func ReadConfigFile(configs *Configurations) error {
-	data, err := os.ReadFile("./.makeup/config.json")
+	data, err := os.ReadFile(filepath.Join(".makeup", "config.json"))
 	if err != nil {
 		return err
 	}
@@ -95,7 +98,7 @@ func ReadConfigFile(configs *Configurations) error {
 }
 
 func CheckMakeup() (bool, error) {
-	_, err := os.Stat("./.makeup")
+	_, err := os.Stat(".makeup")
 	if os.IsNotExist(err) {
 		return false, nil
 	} else if err != nil {
@@ -104,24 +107,74 @@ func CheckMakeup() (bool, error) {
 	return true, nil
 }
 
-func InitializeMakeup(preset string) {
+func MakeupInitialized() (bool, error) {
+	dir, err := os.UserHomeDir()
+	if err != nil {
+		return false, err
+	}
+	_, err = os.Stat(filepath.Join(dir, ".makeup"))
+	if os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func ReadPreset(preset_name string, preset *Preset) error {
+	dir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".makeup", "presets", preset_name+".json"))
+	if err != nil {
+		return err
+	}
+
+	json.Unmarshal(data, preset)
+	return nil
+}
+
+func InitializeMakeupConfig(preset_name string) {
 	exists, err := CheckMakeup()
 	if err != nil {
 		log.Fatal(err)
 	} else if exists {
 		fmt.Println("Makeup already exists here")
+		os.Exit(0)
 	}
 
-	err = os.MkdirAll("./.makeup/cache", 0755)
+	err = os.MkdirAll(filepath.Join(".makeup", "cache"), 0755)
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = os.Create("./.makeup/config.json")
+	_, err = os.Create(filepath.Join(".makeup", "config.json"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	var configs Configurations
+
+	if preset_name == "none" {
+		configs.Build.Profiles.Public = []Profile{
+			{Name: ""},
+		}
+		configs.Build.Profiles.Private = []Profile{
+			{Name: ""},
+		}
+	} else {
+		var preset Preset
+		err = ReadPreset(preset_name, &preset)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		configs.Build.Profiles = preset.Profiles
+	}
+
+	configs.Makeup.Version = VERSION
+
 	err = WriteConfigFile(configs)
 	if err != nil {
 		log.Fatal(err)
@@ -294,47 +347,51 @@ func Formatter(input string, format string) string {
 }
 
 func ClearCache() {
-	err := os.RemoveAll("./.makeup/cache")
+	err := os.RemoveAll(filepath.Join(".makeup", "cache"))
 	if err != nil {
 		log.Fatal(err)
 	}
-	os.Mkdir("./.makeup/cache", 0755)
+	os.Mkdir(filepath.Join(".makeup", "cache"), 0755)
 }
 
 func CheckCache(path string) (bool, error) {
-	// check if file is the same as the cache
+	/*
+		// check if file is the same as the cache
 
-	cache_hash := sha256.Sum256([]byte(path))
-	cache_name := hex.EncodeToString(cache_hash[:])
-	cache_full := filepath.Join("./.makeup/cache", cache_name)
+		cache_hash := sha256.Sum256([]byte(path))
+		cache_name := hex.EncodeToString(cache_hash[:])
+		cache_full := filepath.Join("./.makeup/cache", cache_name)
 
-	_, err := os.Stat(cache_full)
+		_, err := os.Stat(cache_full)
 
-	if os.IsNotExist(err) {
-		return true, nil
-	} else if err != nil {
-		return false, err
-	}
+		if os.IsNotExist(err) {
+			return true, nil
+		} else if err != nil {
+			return false, err
+		}
 
-	cache_content, err := os.ReadFile(cache_full)
-	if err != nil {
-		return false, err
-	}
+		cache_content, err := os.ReadFile(cache_full)
+		if err != nil {
+			return false, err
+		}
 
-	file_content, err := os.ReadFile(path)
-	if err != nil {
-		return false, err
-	}
+		file_content, err := os.ReadFile(path)
+		if err != nil {
+			return false, err
+		}
 
-	file_hash := sha256.Sum256(file_content)
-	result := slices.Compare(cache_content, []byte(file_hash[:]))
-	if result == 0 {
-		return true, nil
-	}
-	return false, nil
+		file_hash := sha256.Sum256(file_content)
+		result := slices.Compare(cache_content, []byte(file_hash[:]))
+		if result == 0 {
+			return true, nil
+		}
+		return false, nil
+	*/
+	return true, nil
 }
 
 func CacheFile(path string) error {
+	/* tallen please help me on ts
 	// create file in .makeup/cache that corresponds to the file to check
 	cache_hash := sha256.Sum256([]byte(path))
 	cache_name := hex.EncodeToString(cache_hash[:])
@@ -349,6 +406,8 @@ func CacheFile(path string) error {
 	encrypted_content_string := hex.EncodeToString(encrypted_content[:])
 
 	os.WriteFile(cache_full, []byte(encrypted_content_string), 0644)
+	return nil
+	*/
 	return nil
 }
 
@@ -371,26 +430,25 @@ func ExecuteProfile(profile_name string, public bool) {
 	}
 
 	for _, command := range commands {
-		fmt.Println(command.command)
-		fmt.Println(command.args)
-		/*
-			cmd := exec.Command(command.command, command.args[1:]...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
+		//fmt.Println(command.command)
+		//fmt.Println(command.args)
+		cmd := exec.Command(command.command, command.args[1:]...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 
-			err = cmd.Run()
-			if err != nil {
-				exitError, ok := err.(*exec.ExitError)
-				if !ok {
-					log.Fatal("Something went wrong")
-				}
-				if exitError.ExitCode() != profile.Condition {
-					log.Fatalf("Condition not met on \"%s\"", profile.Name)
-				}
-			} else if profile.Condition != 0 {
+		err = cmd.Run()
+		if err != nil {
+			exitError, ok := err.(*exec.ExitError)
+			if !ok {
+				log.Fatal("Something went wrong")
+			}
+			if exitError.ExitCode() != profile.Condition {
 				log.Fatalf("Condition not met on \"%s\"", profile.Name)
 			}
-		*/
+		} else if profile.Condition != 0 {
+			log.Fatalf("Condition not met on \"%s\"", profile.Name)
+		}
+
 	}
 
 	if profile.NextProfile == "" {
@@ -399,7 +457,26 @@ func ExecuteProfile(profile_name string, public bool) {
 	ExecuteProfile(profile.NextProfile, false)
 }
 
-func Help(subject string) {
+func Help() {
+	fmt.Println("makeup init - initializes the preset directory for makeup\nmakeup new <preset name> - creates new makeup configuration directory with the preset in your current directory\nmakeup clear - clears cache\nmakeup exec <public profile> - executes a public profile in the makeup configuration json")
+}
+
+func InitializeMakeup() {
+	exists, err := MakeupInitialized()
+	if err != nil {
+		log.Fatal(err)
+	} else if exists {
+		fmt.Println("Makeup is already initialized at ~/.makeup")
+		os.Exit(0)
+	}
+	dir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = os.MkdirAll(filepath.Join(dir, ".makeup", "presets"), 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 }
 
@@ -408,27 +485,34 @@ func main() {
 
 	// "makeup"
 	if len(args) < 2 {
-		fmt.Println("Type 'makeup help' for a list of commands")
+		Help()
 		return
 	}
 
+	var binary_index int
+
+	binary, err := os.Executable()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for index, arg := range args {
+		if arg == binary {
+			binary_index = index
+		}
+	}
+
 	// "makeup <argument>"
-	switch args[1] {
-	case "help":
-		subject := "none"
-		if len(args) == 3 {
-			subject = args[2]
-		}
-		Help(subject)
-		fmt.Println(subject)
-		// makeup help command with subject
+	switch args[binary_index+1] {
+	case "init":
+		InitializeMakeup()
 	case "new":
-		preset := "default"
-		if len(args) == 3 {
-			preset = args[2]
+		preset := "none"
+		if len(args[binary_index:]) == 3 {
+			preset = args[binary_index+2]
 		}
-		InitializeMakeup(preset)
-	case "clear": // clear cache folder
+		InitializeMakeupConfig(preset)
+	case "clear":
 		exists, err := CheckMakeup()
 		if err != nil {
 			log.Fatal(err)
@@ -444,15 +528,12 @@ func main() {
 		} else if !exists {
 			fmt.Println("Makeup is not initialized here. Type 'makeup new <preset>' to initialize makeup")
 			os.Exit(0)
-		} else if len(args) < 3 {
+		} else if len(args[binary_index:]) < 3 {
 			fmt.Println("Type 'makeup exec <profile name>' to execute a profile")
 			os.Exit(0)
 		}
-		ExecuteProfile(args[2], true)
-		// execute a profile in the public profiles
+		ExecuteProfile(args[binary_index+2], true)
 	default:
-		Help("none")
-		// makeup help
-
+		Help()
 	}
 }
